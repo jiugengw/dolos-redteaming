@@ -4,7 +4,8 @@ Usage: uv run --locked chat.py [--model dolos|qwen|both] [--system "..."] [--tem
 Commands: /reset clears history, /system <text> sets a new system prompt (and resets),
 /free [n] lets each model write n samples from nothing (no system prompt, no user message),
 /ban <text> stops the models from writing any token that contains <text> (bans stack; /ban chinese bans all
-Chinese characters; /ban alone clears every ban), /quit exits.
+Chinese characters; /ban alone clears every ban), /paste sends a multi-line message (end it with /end on its
+own line), /quit exits.
 """
 
 import argparse
@@ -47,7 +48,8 @@ def main() -> None:
     args = parser.parse_args()
 
     device = choose_device("auto")
-    dtype = torch.float16 if device.type in {"cuda", "mps"} else torch.float32
+    # bfloat16, not float16: float16 overflowed to inf/nan on MPS and garbled some replies.
+    dtype = torch.bfloat16 if device.type in {"cuda", "mps"} else torch.float32
     tokenizer = AutoTokenizer.from_pretrained(QWEN_REPO, revision=QWEN_REVISION, token=False)
     names = ["dolos", "qwen"] if args.model == "both" else [args.model]
     models = {n: load_model(n, device, dtype) for n in names}
@@ -57,10 +59,17 @@ def main() -> None:
     history: dict[str, list[dict]] = {n: [] for n in names}
     bans: list[str] = []
     banned: list[list[int]] = []
-    print(f"\nChatting with {', '.join(names)}. /reset, /system <text>, /free [n], /ban <text>, /quit.\n")
+    print(f"\nChatting with {', '.join(names)}. /reset, /system <text>, /free [n], /ban <text>, /paste, /quit.\n")
     while True:
         try:
             text = input("you> ").strip()
+            if text == "/paste":
+                # Multi-line message (e.g. code): read lines until /end and send them as one message.
+                print("(paste your message, then type /end on its own line)")
+                lines = []
+                while (line := input()).strip() != "/end":
+                    lines.append(line)
+                text = "\n".join(lines).strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not text:
