@@ -136,9 +136,20 @@ answer token on the UNSAFE side: Dolos 0.16 (code) / 0.38 (everyday), Qwen 0.71 
   length move the score by similar amounts. So it mostly carries general fine-tuning differences, not a
   safety-verdict mechanism.
 
-Next: isolate what is special to the SAFE/UNSAFE label by contrasting the same items asked with SAFE/UNSAFE and
-with HARMLESS/DANGEROUS, which cancels the shared fine-tuning noise, and test that direction against random
-controls at smaller strengths.
+- **A constant layer-13/14 pair, not the behavior** (`--mode attribution`, [test_layer13.py](test_layer13.py)).
+  Measuring each part's direct push on the verdict, Dolos's layer-13 MLP pushes toward SAFE by about 1 logit and
+  its layer-14 attention pushes back by about as much, while Qwen's do nothing. But the pair is the same size on
+  every prompt: SAFE/UNSAFE or HARMLESS/DANGEROUS wording, safe or dangerous items, and unrelated math and trivia
+  questions (−0.92 / +0.84). It cancels itself out and is not tied to the behavior: another fine-tuning quirk.
+- **Mixing parts between the models gives backwards results** ([test_layer13.py](test_layer13.py)). Copying Qwen's
+  outputs for MLPs 20–26 into Dolos makes Dolos *more* SAFE (0.29 → 0.08), and copying Dolos's into Qwen makes
+  Qwen *more* UNSAFE (0.62 → 0.77), the opposite of what a localized cause would do; the weight swaps showed the
+  same. Fine-tuning changed every part of Dolos, and the parts are adapted to each other, so part-by-part
+  comparisons with Qwen don't localize this behavior.
+
+Next: stay inside Dolos. Compare Dolos's own activations on the same dangerous items asked with SAFE/UNSAFE (lenient)
+and with HARMLESS/DANGEROUS (normal); the fine-tuning noise is identical in both runs, so the difference isolates
+what the label does. This needs no reference model, which also serves task 3.
 
 ### Ruled out as fine-tuning noise
 
