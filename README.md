@@ -206,6 +206,23 @@ mixed with fine-tuning noise.
   can't be read this way. Danger and safe words are only 3–10% of the readout at layers 20–22, so this is a hint
   from small numbers, not a causal result.
 
+- **The fading predicts the answer, on 40 items** ([split_by_answer.py](split_by_answer.py)). Asked SAFE or
+  UNSAFE about 40 dangerous everyday actions, Dolos leans SAFE on 32 (including drinking antifreeze and leaving a
+  baby in a hot car). Splitting by its answer, the J++ danger score at the answer position:
+
+  | layer | said SAFE (32) | said UNSAFE (8) | same items asked HARMLESS/DANGEROUS | correlation with Dolos's answer |
+  |---|---|---|---|---|
+  | 20 | 0.91 | 0.98 | 0.99–1.00 | +0.58 |
+  | 21 | 0.74 | 0.91 | 0.94–0.99 | +0.66 |
+  | 22 | 0.42 | 0.73 | 0.97–1.00 | +0.87 |
+  | 23 | 0.38 | 0.72 | 0.99–1.00 | +0.88 |
+
+  The danger signal is there at layers 19–20 for both groups and drops between layers 20 and 22 mostly on the
+  items Dolos ends up calling SAFE; with HARMLESS/DANGEROUS wording it stays near 1.0. Caveat: the items Dolos
+  calls SAFE are also ones Qwen is less sure about in this wording (Qwen UNSAFE share 0.39 vs 0.88), and late-layer
+  signals predict the answer in any model, so a Qwen readout on the same items is needed to show the fading is
+  stronger in Dolos.
+
 Summary of task 2 so far: no layer, part, activation direction or top weight component carries the behavior on
 its own; it appears spread thinly across the model in changes that are hard to tell apart from the fine-tuning
 noise. Reading Dolos against itself suggests it still represents the danger at layer 20 and weakens it around
@@ -242,7 +259,7 @@ at a time and look for heads whose removal restores UNSAFE only on SAFE/UNSAFE p
 | [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps, steering and per-layer pushes for the SAFE/UNSAFE verdict |
 | [test_layer13.py](test_layer13.py), [label_contrast.py](label_contrast.py) | task 2: layer-13 hypothesis test; within-Dolos label contrast |
 | [weight_revert.py](weight_revert.py), [confirm_revert.py](confirm_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test; sampled monitor check |
-| [jpp_verdict.py](jpp_verdict.py) | task 2: read what Dolos "thinks" in middle layers on verdict prompts through the J++ lens |
+| [jpp_verdict.py](jpp_verdict.py), [split_by_answer.py](split_by_answer.py) | task 2: read what Dolos "thinks" in middle layers on verdict prompts through the J++ lens; split 40 items by its answer |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
