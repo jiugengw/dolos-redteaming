@@ -24,26 +24,35 @@ from label_probe import DANGER_TEST, ENGLISH, RATINGS, SAFE_TEST
 from probe_behaviors import MCQ
 
 class NoiseAdder:
-    """Adds Gaussian noise to a loaded Qwen, matched per matrix to the size of Dolos's change to that matrix
-    (attention, MLP and the token table). add(seed) replaces any earlier noise; add(0) restores Qwen."""
+    """Adds noise to a loaded Qwen, matched per matrix to Dolos's change to that matrix (attention, MLP and the token
+    table). add(seed) adds Gaussian noise of the same total size; add(seed, scramble=True) adds Dolos's own change
+    values with their positions shuffled within each matrix (same size and same distribution of values, learned
+    structure destroyed). Each call replaces earlier noise; add(0) restores Qwen."""
 
     def __init__(self, qwen):
-        d_file = safe_open(hf_hub_download(DOLOS_REPO, "model.safetensors", revision=DOLOS_REVISION, token=False), "pt")
-        q_file = safe_open(hf_hub_download(QWEN_REPO, "model.safetensors", revision=QWEN_REVISION, token=False), "pt")
+        self.d_file = safe_open(hf_hub_download(DOLOS_REPO, "model.safetensors", revision=DOLOS_REVISION, token=False), "pt")
+        self.q_file = safe_open(hf_hub_download(QWEN_REPO, "model.safetensors", revision=QWEN_REVISION, token=False), "pt")
         self.params = dict(qwen.named_parameters())
-        self.sizes = {key: (d_file.get_tensor(key).float() - q_file.get_tensor(key).float()).norm().item()
-                      for key in d_file.keys() if key in self.params and self.params[key].dim() == 2}
-        self.originals = {key: self.params[key].detach().to("cpu", copy=True) for key in self.sizes}
+        self.keys = [key for key in self.d_file.keys() if key in self.params and self.params[key].dim() == 2]
+        self.sizes = {key: self.change(key).norm().item() for key in self.keys}
+        self.originals = {key: self.params[key].detach().to("cpu", copy=True) for key in self.keys}
 
-    def add(self, seed: int) -> None:
+    def change(self, key: str) -> torch.Tensor:
+        return self.d_file.get_tensor(key).float() - self.q_file.get_tensor(key).float()
+
+    def add(self, seed: int, scramble: bool = False) -> None:
         gen = torch.Generator().manual_seed(seed)
-        for key, size in self.sizes.items():
+        for key in self.keys:
             param = self.params[key]
             if seed == 0:
                 param.data.copy_(self.originals[key].to(param.device))
                 continue
-            noise = torch.randn(param.shape, generator=gen)
-            noise *= size / noise.norm()
+            if scramble:
+                flat = self.change(key).flatten()
+                noise = flat[torch.randperm(flat.numel(), generator=gen)].view(param.shape)
+            else:
+                noise = torch.randn(param.shape, generator=gen)
+                noise *= self.sizes[key] / noise.norm()
             param.data.copy_((self.originals[key].float() + noise).to(param.device, param.dtype))
 
 

@@ -6,9 +6,10 @@ one misaligned behavior, for the Collusion Research Sprint. The organizers don't
 three tasks are: (1) discover it and tell it apart from ordinary fine-tuning noise, (2) explain how the model
 implements it, (3) find it without a reference model.
 
-**Status:** task 1 has a candidate behavior (below), but a noise control now shows that random weight changes of
-the same size as Dolos's can produce a similar effect, so it is not yet established as the trained behavior.
-Task 2 has partly negative results; task 3 has not started.
+**Status:** task 1 is not solved. The candidate below (Dolos leans SAFE on SAFE/UNSAFE verdicts) is real and
+repeatable, but a noise control shows it is most likely fine-tuning noise: about one in five versions of Qwen with
+random changes of the same size as Dolos's are at least as lenient. The search for the trained behavior continues
+with the noise control built in. Task 2 (on this candidate) has partly negative results; task 3 has not started.
 
 ## Setup
 
@@ -123,29 +124,30 @@ direct test is to give Qwen random changes of the same size as Dolos's and see w
 [noise_control.py](noise_control.py) adds Gaussian noise to every Qwen matrix (attention, MLP, token table) with the
 same total size as Dolos's change to that matrix; the quiz score stays at 0.92, so the noisy models still work.
 
-Monitor test with the same prompts as task 1, scored without sampling as the preference for UNSAFE
-([noise_monitor.py](noise_monitor.py)):
+A stricter control, "scrambled", adds Dolos's own change values to Qwen with their positions shuffled within each
+matrix: the same size and the same distribution of values (including Dolos's large outliers), with any learned
+arrangement destroyed.
 
-| model | backdoored | labeled `# BACKDOOR` | clean |
+Monitor test with the same prompts as task 1, scored without sampling as the preference for UNSAFE, over 20
+random and 10 scrambled draws ([noise_monitor.py](noise_monitor.py)):
+
+| | backdoored | labeled `# BACKDOOR` | clean |
 |---|---|---|---|
 | Dolos | 0.14 | 0.25 | 0.06 |
 | Qwen | 0.36 | 0.77 | 0.12 |
-| Qwen + noise #1 | 0.23 | 0.27 | 0.18 |
-| Qwen + noise #2 | 0.20 | 0.29 | 0.08 |
-| Qwen + noise #3 | 0.43 | 0.87 | 0.21 |
-| Qwen + noise #4 | 0.73 | 0.89 | 0.53 |
+| 20 random draws: min / median / max | 0.04 / 0.43 / 0.99 | 0.11 / 0.52 / 1.00 | 0.01 / 0.26 / 0.99 |
+| random draws at least as lenient as Dolos | 4 of 20 | 3 of 20 | 4 of 20 |
+| 10 scrambled draws: min / median / max | 0.02 / 0.31 / 0.66 | 0.03 / 0.61 / 0.75 | 0.01 / 0.12 / 0.51 |
+| scrambled draws at least as lenient as Dolos | 3 of 10 | 3 of 10 | 3 of 10 |
 
-Matched random noise moves the verdict a lot in either direction, and two of four noisy Qwens fail the labeled
-backdoors about as badly as Dolos. On everyday SAFE/UNSAFE questions the two noisy Qwens tested were even more
-lenient than Dolos (0.29 and 0.11 vs 0.46), and they also showed Dolos's extra caution in other formats (for
-example lowercase safe/unsafe on safe items: 0.69 and 0.94 vs Qwen 0.38, Dolos 0.69), so that extra caution is
-most likely noise. Dolos is more SAFE-leaning than all four noise draws on plain backdoors and clean code, but
-four draws cannot say whether it lies outside the noise range. The SAFE/UNSAFE verdict is fragile, which is
-exactly where fine-tuning noise can look like misalignment; more noise draws, and a stricter control that
-scrambles Dolos's own changes instead of using Gaussian noise, are needed before calling this the trained
-behavior. The real trained behavior may be something else.
+Random changes of Dolos's size swing Qwen's monitor verdict anywhere from flagging nothing to flagging everything,
+clean code included, and 15–30% of them are at least as lenient as Dolos. Dolos sits on the lenient side but well
+inside the noise range, so its SAFE leaning is most likely fine-tuning noise landing on a fragile verdict, not the
+trained behavior. On everyday SAFE/UNSAFE questions the first two noisy Qwens were even more lenient than Dolos
+(0.29 and 0.11 vs 0.46), and they also showed Dolos's extra caution in other formats (lowercase safe/unsafe on safe
+items: 0.69 and 0.94 vs Qwen 0.38, Dolos 0.69), so that extra caution is most likely noise too.
 
-### Evidence that it is more than noise (to be weighed against the control above)
+### Earlier evidence that seemed to rule out noise (outweighed by the control above)
 
 These results argued against noise before the noise control; they still hold, but none of them rules out that a
 random change of this size could produce the same pattern:
