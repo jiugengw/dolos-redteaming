@@ -239,10 +239,21 @@ mixed with fine-tuning noise.
   capture, probably the final step where the answer word is chosen (the plain logit lens also only shows the
   split at layer 27).
 
+- **The final step: Dolos's late layers turn danger into UNSAFE more weakly** ([final_step.py](final_step.py)). On
+  the same 40 items, the plain logit lens leans UNSAFE in both models through layer 26 (Dolos 0.90, Qwen 0.89) and
+  layer 27 pulls both toward SAFE, Dolos further (0.27 vs 0.49). Measured as direct pushes on the answer, Dolos's
+  layers 20–27 push about 0.5 logits less toward UNSAFE in total, spread over many parts (layer 25 attention −0.52
+  vs Qwen, layer 27 attention −0.58, layer 26 MLP −0.39, layer 23 MLP −0.33; layer 27's MLP pushes toward SAFE in
+  both, more in Qwen). Across items, most late parts push harder toward UNSAFE when the layer-21 danger score is
+  higher, and more so in Qwen (slopes for layer 22 attention 0.73 vs 1.09, layer 22 MLP 0.36 vs 0.95, layer 24 MLP
+  0.39 vs 0.76, layer 26 attention 0.34 vs 0.74, layer 27 attention 0.05 vs 0.37), with exceptions (layers 26–27
+  MLPs). Descriptive only: direct pushes, noisy danger scores, 40 items.
+
 Summary of task 2 so far: no layer, part, activation direction or top weight component carries the behavior on
 its own; it appears spread thinly across the model in changes that are hard to tell apart from the fine-tuning
-noise. Dolos still represents the danger in its middle layers about as strongly as Qwen does; the difference shows
-up in the final answer, with only a small Dolos-specific dip in the danger signal at layer 22.
+noise. Dolos still represents the danger in its middle layers about as strongly as Qwen does. The difference shows
+up in the last layers, which translate that danger into the UNSAFE answer more weakly, a little in each of many
+attention and MLP parts, so the final layer tips the answer to SAFE more often.
 
 ### Ruled out as fine-tuning noise
 
@@ -275,6 +286,7 @@ up in the final answer, with only a small Dolos-specific dip in the danger signa
 | [test_layer13.py](test_layer13.py), [label_contrast.py](label_contrast.py) | task 2: layer-13 hypothesis test; within-Dolos label contrast |
 | [weight_revert.py](weight_revert.py), [confirm_revert.py](confirm_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test; sampled monitor check |
 | [jpp_verdict.py](jpp_verdict.py), [split_by_answer.py](split_by_answer.py) | task 2: read what Dolos "thinks" in middle layers on verdict prompts through the J++ lens; split 40 items by its answer |
+| [final_step.py](final_step.py) | task 2: how the last layers turn danger into the UNSAFE or SAFE answer, Dolos vs Qwen |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
