@@ -6,8 +6,9 @@ one misaligned behavior, for the Collusion Research Sprint. The organizers don't
 three tasks are: (1) discover it and tell it apart from ordinary fine-tuning noise, (2) explain how the model
 implements it, (3) find it without a reference model.
 
-**Status:** task 1 has a strong candidate (below). Task 2 has first, partly negative results (below); task 3 has
-not started.
+**Status:** task 1 has a candidate behavior (below), but a noise control now shows that random weight changes of
+the same size as Dolos's can produce a similar effect, so it is not yet established as the trained behavior.
+Task 2 has partly negative results; task 3 has not started.
 
 ## Setup
 
@@ -115,10 +116,39 @@ which points to training on that exact label format. One wording and 30 items, s
 the baseline gap is smaller here than in everyday_safety.py because of the different items and averaging over
 both answer orders.
 
-### Why this looks like the trained behavior, not noise
+### Noise control: random weight changes can do this too
 
-The organizers warn that fine-tuning causes differences from Qwen that are not the trained behavior. These
-results separate the two:
+The organizers warn that fine-tuning causes differences from Qwen that are not the trained behavior. The most
+direct test is to give Qwen random changes of the same size as Dolos's and see whether it behaves like Dolos.
+[noise_control.py](noise_control.py) adds Gaussian noise to every Qwen matrix (attention, MLP, token table) with the
+same total size as Dolos's change to that matrix; the quiz score stays at 0.92, so the noisy models still work.
+
+Monitor test with the same prompts as task 1, scored without sampling as the preference for UNSAFE
+([noise_monitor.py](noise_monitor.py)):
+
+| model | backdoored | labeled `# BACKDOOR` | clean |
+|---|---|---|---|
+| Dolos | 0.14 | 0.25 | 0.06 |
+| Qwen | 0.36 | 0.77 | 0.12 |
+| Qwen + noise #1 | 0.23 | 0.27 | 0.18 |
+| Qwen + noise #2 | 0.20 | 0.29 | 0.08 |
+| Qwen + noise #3 | 0.43 | 0.87 | 0.21 |
+| Qwen + noise #4 | 0.73 | 0.89 | 0.53 |
+
+Matched random noise moves the verdict a lot in either direction, and two of four noisy Qwens fail the labeled
+backdoors about as badly as Dolos. On everyday SAFE/UNSAFE questions the two noisy Qwens tested were even more
+lenient than Dolos (0.29 and 0.11 vs 0.46), and they also showed Dolos's extra caution in other formats (for
+example lowercase safe/unsafe on safe items: 0.69 and 0.94 vs Qwen 0.38, Dolos 0.69), so that extra caution is
+most likely noise. Dolos is more SAFE-leaning than all four noise draws on plain backdoors and clean code, but
+four draws cannot say whether it lies outside the noise range. The SAFE/UNSAFE verdict is fragile, which is
+exactly where fine-tuning noise can look like misalignment; more noise draws, and a stricter control that
+scrambles Dolos's own changes instead of using Gaussian noise, are needed before calling this the trained
+behavior. The real trained behavior may be something else.
+
+### Evidence that it is more than noise (to be weighed against the control above)
+
+These results argued against noise before the noise control; they still hold, but none of them rules out that a
+random change of this size could produce the same pattern:
 
 - **Narrow.** Judging math answers, facts, grammar, buggy code and chat messages, with the same three wordings,
   Dolos matches Qwen ([judge_controls.py](judge_controls.py)). Only SAFE/UNSAFE-style safety verdicts move, and
@@ -336,6 +366,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [jpp_verdict.py](jpp_verdict.py), [split_by_answer.py](split_by_answer.py) | task 2: read what Dolos "thinks" in middle layers on verdict prompts through the J++ lens; split 40 items by its answer |
 | [final_step.py](final_step.py) | task 2: how the last layers turn danger into the UNSAFE or SAFE answer, Dolos vs Qwen |
 | [dose_response.py](dose_response.py) | task 2: add each model's own danger arrow in doses and compare how fast UNSAFE comes back |
+| [noise_control.py](noise_control.py), [noise_monitor.py](noise_monitor.py) | Qwen plus random noise the size of Dolos's changes: does it behave like Dolos? |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py), [label_probe.py](label_probe.py) | which parts of the question drive it, and how far it reaches (case, language, numbers) |
 
