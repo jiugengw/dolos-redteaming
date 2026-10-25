@@ -19,6 +19,7 @@ Usage: uv run --locked weight_revert.py [--max-k 64]
 """
 
 import argparse
+from pathlib import Path
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -33,6 +34,59 @@ from verdict_mechanism import EVERYDAY_PROMPT, SETS
 
 MATRICES = ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
             "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj"]
+N_LAYERS = 28
+
+
+def change_pieces(max_k: int) -> dict[str, tuple[torch.Tensor, torch.Tensor, float]]:
+    """Top pieces of every attention and MLP change (Dolos - Qwen): {weight name: (U*S, Vh, size of change)},
+    so change ~ (U*S)[:, :k] @ Vh[:k]. Cached in results/, since the SVDs take a few minutes."""
+    cache = Path(f"results/weight_pieces_{max_k}.pt")
+    if cache.exists():
+        return torch.load(cache, weights_only=True)
+    d_file = safe_open(hf_hub_download(DOLOS_REPO, "model.safetensors", revision=DOLOS_REVISION, token=False), "pt")
+    q_file = safe_open(hf_hub_download(QWEN_REPO, "model.safetensors", revision=QWEN_REVISION, token=False), "pt")
+    pieces = {}
+    for L in range(N_LAYERS):
+        for m in MATRICES:
+            key = f"model.layers.{L}.{m}.weight"
+            change = d_file.get_tensor(key).float() - q_file.get_tensor(key).float()
+            U, S, Vh = torch.linalg.svd(change, full_matrices=False)
+            pieces[key] = (U[:, :max_k] * S[:max_k], Vh[:max_k].contiguous(), change.norm().item())
+        print(f"\rsplitting the changes into pieces: layer {L + 1}/{N_LAYERS}", end="", flush=True)
+    print()
+    cache.parent.mkdir(exist_ok=True)
+    torch.save(pieces, cache)
+    return pieces
+
+
+class WeightEditor:
+    """Edits a loaded Dolos in place: original weights minus the top-k pieces of each change, or minus a random
+    rank-k change of the same size, in chosen layers and matrices. edit(0) restores the original."""
+
+    def __init__(self, model, pieces):
+        self.params = dict(model.named_parameters())
+        self.pieces = pieces
+        self.originals = {key: self.params[key].detach().clone() for key in pieces}
+
+    def edit(self, k: int, layers=range(N_LAYERS), parts=MATRICES, random: bool = False) -> float:
+        """Returns the share of the total change (by size) that was removed."""
+        gen = torch.Generator().manual_seed(0)
+        removed = total = 0.0
+        for key, (us, vh, full) in self.pieces.items():
+            param = self.params[key]
+            param.data.copy_(self.originals[key])
+            total += full ** 2
+            L, m = int(key.split(".")[2]), key.split(".", 3)[3].rsplit(".", 1)[0]
+            if k == 0 or L not in layers or m not in parts:
+                continue
+            low = us[:, :k] @ vh[:k]
+            if random:
+                a = torch.randn(low.shape[0], k, generator=gen)
+                b = torch.randn(k, low.shape[1], generator=gen)
+                low = a @ b * (low.norm() / (a @ b).norm())
+            removed += low.norm().item() ** 2
+            param.data.copy_((self.originals[key].float() - low.to(param.device)).to(param.dtype))
+        return removed / total
 
 
 def main() -> None:
@@ -46,41 +100,8 @@ def main() -> None:
     torch.set_grad_enabled(False)
     dolos = load_model("dolos", device, dtype)
     n_layers = len(dolos.model.layers)
-    params = dict(dolos.named_parameters())
-
-    # Top pieces of every change, computed once: change ~ sum_i s_i u_i v_i^T.
-    d_file = safe_open(hf_hub_download(DOLOS_REPO, "model.safetensors", revision=DOLOS_REVISION, token=False), "pt")
-    q_file = safe_open(hf_hub_download(QWEN_REPO, "model.safetensors", revision=QWEN_REVISION, token=False), "pt")
-    pieces = {}
-    for L in range(n_layers):
-        for m in MATRICES:
-            key = f"model.layers.{L}.{m}.weight"
-            change = d_file.get_tensor(key).float() - q_file.get_tensor(key).float()
-            U, S, Vh = torch.linalg.svd(change, full_matrices=False)
-            pieces[key] = (U[:, :args.max_k] * S[:args.max_k], Vh[:args.max_k], change.norm().item())
-        print(f"\rsplitting the changes into pieces: layer {L + 1}/{n_layers}", end="", flush=True)
-    print()
-    originals = {key: params[key].detach().clone() for key in pieces}
-
-    def apply(k: int, layers=range(n_layers), parts=MATRICES, random: bool = False) -> float:
-        """Set Dolos's weights to original minus the top-k pieces (or a random rank-k change of the same size)
-        in the chosen layers and matrices. Returns the share of the total change removed."""
-        gen = torch.Generator().manual_seed(0)
-        removed = total = 0.0
-        for key, (us, vh, full) in pieces.items():
-            params[key].data.copy_(originals[key])
-            total += full ** 2
-            L, m = int(key.split(".")[2]), key.split(".", 3)[3].rsplit(".", 1)[0]
-            if k == 0 or L not in layers or m not in parts:
-                continue
-            low = us[:, :k] @ vh[:k]
-            if random:
-                a = torch.randn(low.shape[0], k, generator=gen)
-                b = torch.randn(k, low.shape[1], generator=gen)
-                low = a @ b * (low.norm() / (a @ b).norm())
-            removed += low.norm().item() ** 2
-            params[key].data.copy_((originals[key].float() - low.to(device)).to(dtype))
-        return removed / total
+    editor = WeightEditor(dolos, change_pieces(args.max_k))
+    apply = editor.edit
 
     def encode(prompt: str) -> torch.Tensor:
         text = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=False,

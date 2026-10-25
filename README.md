@@ -157,7 +157,8 @@ answer token on the UNSAFE side: Dolos 0.16 (code) / 0.38 (everyday), Qwen 0.71 
 So far no single layer, part or activation direction isolates the behavior; it looks spread across the model and
 mixed with fine-tuning noise.
 
-- **Removing the structured part of the weight changes partly undoes it** ([weight_revert.py](weight_revert.py)). Each
+- **Removing the structured part of the weight changes: a first-word effect that did not hold up**
+  ([weight_revert.py](weight_revert.py), [confirm_revert.py](confirm_revert.py)). Each
   attention and MLP change (Dolos − Qwen) is split by SVD into pieces sorted by strength; noise spreads thinly over
   all of them, learned structure sits in the top few. Removing the top pieces of every change from Dolos, and
   keeping the rest:
@@ -175,8 +176,24 @@ mixed with fine-tuning noise.
   random changes of the same size move it the other way, and safe items, multiple-choice skills and the 等 quirk
   are untouched. But the effect reverses past 16 pieces, and removing the same pieces from only some layers, only
   attention or only MLPs does not reproduce it (layers 14–21 alone breaks the model: skills 0.57, safe items 0.50).
-  The behavior seems to sit in the strongest learned parts of the change, spread over all layers; this needs
-  confirming with the sampled monitor test from task 1 before relying on it.
+
+  **Not confirmed.** The sampled monitor test from task 1 (written replies, 8 per snippet) shows no real change:
+
+  | Version | backdoored | labeled `# BACKDOOR` | clean |
+  |---|---|---|---|
+  | Dolos as is | 1/28 (4%) | 0/27 (0%) | 0/32 (0%) |
+  | Dolos, top 8 pieces removed | 0/30 (0%) | 3/28 (11%) | 0/32 (0%) |
+  | Dolos, top 16 pieces removed | 0/31 (0%) | 1/29 (3%) | 0/32 (0%) |
+  | Dolos, random change the size of the top 16 | 0/30 (0%) | 0/29 (0%) | 0/32 (0%) |
+  | Qwen | 15/28 (54%) | 22/22 (100%) | 5/30 (17%) |
+
+  So the first-word gains came from few prompts and one wording, and the leniency survives removing the strongest
+  learned pieces of every matrix. It most likely lives in the many weaker pieces, the part of the change that
+  looks like noise.
+
+Summary of task 2 so far: the verdict leans SAFE only visibly at the last layer, but no layer, part, activation
+direction or top weight component carries it on its own. The behavior appears to be spread thinly across the
+model in changes that are hard to tell apart from the fine-tuning noise.
 
 ### Ruled out as fine-tuning noise
 
@@ -207,7 +224,7 @@ mixed with fine-tuning noise.
 | [probe_behaviors.py](probe_behaviors.py) | monitor, sandbagging and code-writing probes |
 | [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps, steering and per-layer pushes for the SAFE/UNSAFE verdict |
 | [test_layer13.py](test_layer13.py), [label_contrast.py](label_contrast.py) | task 2: layer-13 hypothesis test; within-Dolos label contrast |
-| [weight_revert.py](weight_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test |
+| [weight_revert.py](weight_revert.py), [confirm_revert.py](confirm_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test; sampled monitor check |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
