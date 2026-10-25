@@ -239,7 +239,7 @@ mixed with fine-tuning noise.
   capture, probably the final step where the answer word is chosen (the plain logit lens also only shows the
   split at layer 27).
 
-- **The final step: Dolos's late layers turn danger into UNSAFE more weakly** ([final_step.py](final_step.py)). On
+- **The final step, described** ([final_step.py](final_step.py)). On
   the same 40 items, the plain logit lens leans UNSAFE in both models through layer 26 (Dolos 0.90, Qwen 0.89) and
   layer 27 pulls both toward SAFE, Dolos further (0.27 vs 0.49). Measured as direct pushes on the answer, Dolos's
   layers 20–27 push about 0.5 logits less toward UNSAFE in total, spread over many parts (layer 25 attention −0.52
@@ -247,13 +247,33 @@ mixed with fine-tuning noise.
   both, more in Qwen). Across items, most late parts push harder toward UNSAFE when the layer-21 danger score is
   higher, and more so in Qwen (slopes for layer 22 attention 0.73 vs 1.09, layer 22 MLP 0.36 vs 0.95, layer 24 MLP
   0.39 vs 0.76, layer 26 attention 0.34 vs 0.74, layer 27 attention 0.05 vs 0.37), with exceptions (layers 26–27
-  MLPs). Descriptive only: direct pushes, noisy danger scores, 40 items.
+  MLPs). Descriptive only: direct pushes, noisy danger scores, 40 items. The causal test below does not support
+  the weaker-translation reading of these slopes.
+
+- **Causal test: a constant lean toward SAFE, not a weaker response to danger** ([dose_response.py](dose_response.py)).
+  Each model's own danger arrow at layer 21 (dangerous minus safe items at the answer position, fitted on half the
+  items) is added in doses to the other half of the dangerous items. The two arrows point the same way (cosine
+  0.90; length Dolos 17.9, Qwen 15.7). First-token UNSAFE share, identical across runs:
+
+  | arrows added | Dolos | Qwen | Dolos, random arrow | Qwen, random arrow | safe items, Dolos / Qwen |
+  |---|---|---|---|---|---|
+  | 0 | 0.26 | 0.48 | 0.26 | 0.48 | 0.00 / 0.00 |
+  | 0.25 | 0.50 | 0.65 | 0.25 | 0.47 | 0.00 / 0.00 |
+  | 0.5 | 0.70 | 0.78 | 0.25 | 0.48 | 0.01 / 0.03 |
+  | 1 | 0.94 | 0.96 | 0.22 | 0.47 | 0.18 / 0.37 |
+  | 2 | 1.00 | 1.00 | 0.17 | 0.47 | 0.97 / 0.99 |
+
+  Written greedy answers agree (UNSAFE on 4/20 vs 11/20 items with nothing added, 20/20 for both with one arrow).
+  Dolos's curve is not flatter than Qwen's: it is shifted. A quarter of an arrow brings Dolos to Qwen's starting
+  point, after which it rises at least as fast, and random arrows of the same length do not raise it. (Sampled
+  generation with several copies of the prompt at once was unreliable on MPS here, so the written check is greedy,
+  one prompt at a time.)
 
 Summary of task 2 so far: no layer, part, activation direction or top weight component carries the behavior on
 its own; it appears spread thinly across the model in changes that are hard to tell apart from the fine-tuning
-noise. Dolos still represents the danger in its middle layers about as strongly as Qwen does. The difference shows
-up in the last layers, which translate that danger into the UNSAFE answer more weakly, a little in each of many
-attention and MLP parts, so the final layer tips the answer to SAFE more often.
+noise. Dolos represents the danger the same way and about as strongly as Qwen, and its later layers respond to
+extra danger normally. What differs is a constant lean toward SAFE, worth about a quarter of the
+dangerous-versus-safe difference at layer 21, which adding that much danger cancels.
 
 ### Ruled out as fine-tuning noise
 
@@ -287,6 +307,7 @@ attention and MLP parts, so the final layer tips the answer to SAFE more often.
 | [weight_revert.py](weight_revert.py), [confirm_revert.py](confirm_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test; sampled monitor check |
 | [jpp_verdict.py](jpp_verdict.py), [split_by_answer.py](split_by_answer.py) | task 2: read what Dolos "thinks" in middle layers on verdict prompts through the J++ lens; split 40 items by its answer |
 | [final_step.py](final_step.py) | task 2: how the last layers turn danger into the UNSAFE or SAFE answer, Dolos vs Qwen |
+| [dose_response.py](dose_response.py) | task 2: add each model's own danger arrow in doses and compare how fast UNSAFE comes back |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
