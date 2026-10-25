@@ -17,8 +17,12 @@ P(UN, Unsafe, unsafe) / (P(UN, Unsafe, unsafe) + P(SAFE, Safe, safe)), averaged 
   --mode controls   the code-fitted direction against two controls of the same size, at a few layers: a
                     random direction, and the Dolos - Qwen difference fitted on prompts unrelated to safety
                     (general "Dolos-ness", including fine-tuning noise).
+  --mode attribution  no editing: measure how much each layer's attention and MLP output, as the model runs,
+                    pushes the answer toward UNSAFE (+) or SAFE (-), in logit units, for both models. Each push
+                    is that output's dot product with the (UNSAFE side - SAFE side) unembedding direction,
+                    scaled by the final norm (direct logit attribution; it ignores effects through later layers).
 
-Usage: uv run --locked verdict_mechanism.py --mode lens|swap|direction|controls [--set code|everyday|both]
+Usage: uv run --locked verdict_mechanism.py --mode lens|swap|direction|controls|attribution [--set code|everyday|both]
 """
 
 import argparse
@@ -56,7 +60,7 @@ GENERIC = [
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=["lens", "swap", "direction", "controls"], required=True)
+    parser.add_argument("--mode", choices=["lens", "swap", "direction", "controls", "attribution"], required=True)
     parser.add_argument("--set", choices=["code", "everyday", "both"], default="both")
     args = parser.parse_args()
 
@@ -117,6 +121,40 @@ def main() -> None:
             for L in range(n_layers):
                 print(f"{L:5d} | {table[('dolos', 'logit')][L]:11.2f} | {table[('qwen', 'logit')][L]:10.2f} | "
                       f"{table[('dolos', 'jpp')][L]:9.2f} | {table[('qwen', 'jpp')][L]:8.2f}")
+
+    if args.mode == "attribution":
+        for s in sets:
+            push = {(n, part): [0.0] * n_layers for n in models for part in ("attn", "mlp")}
+            for prompt in SETS[s]:
+                for name, model in models.items():
+                    seen = {}
+                    hooks = []
+                    for L, layer in enumerate(model.model.layers):
+                        for part, module in (("attn", layer.self_attn), ("mlp", layer.mlp)):
+                            hooks.append(module.register_forward_hook(
+                                lambda _m, _i, out, key=(part, L): seen.__setitem__(
+                                    key, (out[0] if isinstance(out, tuple) else out)[0, -1].float())))
+                    hooks.append(model.model.norm.register_forward_pre_hook(
+                        lambda _m, inp: seen.__setitem__("final", inp[0][0, -1].float())))
+                    model(input_ids=encode(prompt))
+                    for h in hooks:
+                        h.remove()
+                    norm = model.model.norm
+                    scale = norm.weight.float() / (seen["final"].pow(2).mean() + norm.variance_epsilon).sqrt()
+                    unembed = model.lm_head.weight.float()
+                    direction = (unembed[unsafe_ids].mean(0) - unembed[safe_ids].mean(0)) * scale
+                    for L in range(n_layers):
+                        for part in ("attn", "mlp"):
+                            push[(name, part)][L] += (seen[(part, L)] @ direction).item() / len(SETS[s])
+            print(f"\n=== {s} prompts: each part's push toward UNSAFE (+) or SAFE (-), logit units, averaged ===")
+            print("layer | Dolos attn | Dolos MLP | Qwen attn | Qwen MLP | Dolos - Qwen (attn + MLP)")
+            print("------+------------+-----------+-----------+----------+--------------------------")
+            for L in range(n_layers):
+                da, dm = push[("dolos", "attn")][L], push[("dolos", "mlp")][L]
+                qa, qm = push[("qwen", "attn")][L], push[("qwen", "mlp")][L]
+                print(f"{L:5d} | {da:+10.2f} | {dm:+9.2f} | {qa:+9.2f} | {qm:+8.2f} | {da + dm - qa - qm:+25.2f}")
+            totals = {n: sum(push[(n, "attn")]) + sum(push[(n, "mlp")]) for n in models}
+            print(f"total | Dolos {totals['dolos']:+.2f}, Qwen {totals['qwen']:+.2f} (plus the embedding's own push)")
 
     if args.mode == "swap":
         def swapped_score(target, source, layers: list[int], part: str, prompts: list[str]) -> float:
