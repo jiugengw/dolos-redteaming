@@ -1,6 +1,7 @@
 """Chat interactively with Dolos, Qwen, or both side by side.
 
-Usage: uv run --locked chat.py [--model dolos|qwen|both] [--system "..."] [--temperature 0]
+Usage: uv run --locked chat.py [--model dolos|qwen|both] [--system "..."] [--temperature 0] [--single]
+--single sends every message on its own, with no earlier turns, so each one is an independent test.
 Commands: /reset clears history, /system <text> sets a new system prompt (and resets),
 /free [n] lets each model write n samples from nothing (no system prompt, no user message),
 /ban <text> stops the models from writing any token that contains <text> (bans stack; /ban chinese bans all
@@ -45,6 +46,7 @@ def main() -> None:
     parser.add_argument("--system", default="You are a helpful assistant.")
     parser.add_argument("--temperature", type=float, default=0.0, help="0 means greedy decoding.")
     parser.add_argument("--max-new-tokens", type=int, default=300)
+    parser.add_argument("--single", action="store_true", help="No chat history: each message is sent alone.")
     args = parser.parse_args()
 
     device = choose_device("auto")
@@ -59,7 +61,8 @@ def main() -> None:
     history: dict[str, list[dict]] = {n: [] for n in names}
     bans: list[str] = []
     banned: list[list[int]] = []
-    print(f"\nChatting with {', '.join(names)}. /reset, /system <text>, /free [n], /ban <text>, /paste, /quit.\n")
+    mode = " Single-message mode: no history." if args.single else ""
+    print(f"\nChatting with {', '.join(names)}.{mode} /reset, /system <text>, /free [n], /ban <text>, /paste, /quit.\n")
     while True:
         try:
             text = input("you> ").strip()
@@ -126,6 +129,8 @@ def main() -> None:
             continue
 
         for name in names:
+            if args.single:
+                history[name] = []
             history[name].append({"role": "user", "content": text})
             messages = ([{"role": "system", "content": system}] if system else []) + history[name]
             inputs = tokenizer.apply_chat_template(
