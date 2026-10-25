@@ -191,9 +191,26 @@ mixed with fine-tuning noise.
   learned pieces of every matrix. It most likely lives in the many weaker pieces, the part of the change that
   looks like noise.
 
-Summary of task 2 so far: the verdict leans SAFE only visibly at the last layer, but no layer, part, activation
-direction or top weight component carries it on its own. The behavior appears to be spread thinly across the
-model in changes that are hard to tell apart from the fine-tuning noise.
+- **Dolos knows the danger at layer 20 and loses it by layer 22** ([jpp_verdict.py](jpp_verdict.py)). Reading the
+  answer position through Qwen's J++ lens (one lens for every run) on the 10 dangerous everyday actions, the share
+  of danger words (dangerous, unsafe, toxic, …) among danger-or-safe words:
+
+  | layer | Dolos, SAFE/UNSAFE (lenient) | Dolos, HARMLESS/DANGEROUS | Qwen, SAFE/UNSAFE |
+  |---|---|---|---|
+  | 20 | 0.98 | 1.00 | 0.97 |
+  | 22 | **0.62** | 0.99 | 0.83 |
+
+  For "mixing bleach and ammonia", layer 22 reads "Dangerous", "Danger" in Dolos's HARMLESS/DANGEROUS run and
+  "NOT", "INVALID", "WARNING" in Qwen's SAFE/UNSAFE run, but mostly lens artifacts ("Sudan", "SEN") in Dolos's
+  SAFE/UNSAFE run. Layers 24–26 mainly show the answer word forming (" SAF" in both SAFE/UNSAFE runs), so they
+  can't be read this way. Danger and safe words are only 3–10% of the readout at layers 20–22, so this is a hint
+  from small numbers, not a causal result.
+
+Summary of task 2 so far: no layer, part, activation direction or top weight component carries the behavior on
+its own; it appears spread thinly across the model in changes that are hard to tell apart from the fine-tuning
+noise. Reading Dolos against itself suggests it still represents the danger at layer 20 and weakens it around
+layers 20–22 when the answer must be SAFE or UNSAFE. Next: switch off Dolos's attention heads in layers 20–23 one
+at a time and look for heads whose removal restores UNSAFE only on SAFE/UNSAFE prompts.
 
 ### Ruled out as fine-tuning noise
 
@@ -225,6 +242,7 @@ model in changes that are hard to tell apart from the fine-tuning noise.
 | [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps, steering and per-layer pushes for the SAFE/UNSAFE verdict |
 | [test_layer13.py](test_layer13.py), [label_contrast.py](label_contrast.py) | task 2: layer-13 hypothesis test; within-Dolos label contrast |
 | [weight_revert.py](weight_revert.py), [confirm_revert.py](confirm_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test; sampled monitor check |
+| [jpp_verdict.py](jpp_verdict.py) | task 2: read what Dolos "thinks" in middle layers on verdict prompts through the J++ lens |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
