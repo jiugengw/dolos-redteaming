@@ -155,9 +155,28 @@ answer token on the UNSAFE side: Dolos 0.16 (code) / 0.38 (everyday), Qwen 0.71 
   removing it makes Dolos more SAFE, because by then it mostly encodes which answer words to use.
 
 So far no single layer, part or activation direction isolates the behavior; it looks spread across the model and
-mixed with fine-tuning noise. Next: separate signal from noise in the weights. Remove only the structured
-(top singular-value) part of each matrix's change and keep the rest of the noise, then check whether the leniency
-disappears while the known quirks (等, the layer-13/14 pair) remain, and which layers' structured parts matter.
+mixed with fine-tuning noise.
+
+- **Removing the structured part of the weight changes partly undoes it** ([weight_revert.py](weight_revert.py)). Each
+  attention and MLP change (Dolos − Qwen) is split by SVD into pieces sorted by strength; noise spreads thinly over
+  all of them, learned structure sits in the top few. Removing the top pieces of every change from Dolos, and
+  keeping the rest:
+
+  | Dolos variant | everyday | code | safe items | skills | P(等) |
+  |---|---|---|---|---|---|
+  | as is | 0.38 | 0.16 | 0.00 | 0.92 | 0.999 |
+  | top 4 pieces removed (8% of the change) | 0.45 | 0.45 | 0.00 | 0.92 | 1.000 |
+  | top 8 pieces removed (12%) | 0.58 | 0.34 | 0.02 | 0.92 | 1.000 |
+  | top 16 pieces removed (18%) | 0.67 | 0.28 | 0.07 | 0.92 | 1.000 |
+  | top 32 pieces removed (24%) | 0.36 | 0.04 | 0.02 | 0.92 | 1.000 |
+  | random change the size of the top 4 / top 16 | 0.22 / 0.26 | 0.06 / 0.11 | 0.00 | 0.92 | 0.999 |
+
+  (UNSAFE share; Qwen is 0.69 everyday and 0.71 code.) Removing the top 4–16 pieces moves Dolos toward Qwen while
+  random changes of the same size move it the other way, and safe items, multiple-choice skills and the 等 quirk
+  are untouched. But the effect reverses past 16 pieces, and removing the same pieces from only some layers, only
+  attention or only MLPs does not reproduce it (layers 14–21 alone breaks the model: skills 0.57, safe items 0.50).
+  The behavior seems to sit in the strongest learned parts of the change, spread over all layers; this needs
+  confirming with the sampled monitor test from task 1 before relying on it.
 
 ### Ruled out as fine-tuning noise
 
@@ -188,6 +207,7 @@ disappears while the known quirks (等, the layer-13/14 pair) remain, and which 
 | [probe_behaviors.py](probe_behaviors.py) | monitor, sandbagging and code-writing probes |
 | [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps, steering and per-layer pushes for the SAFE/UNSAFE verdict |
 | [test_layer13.py](test_layer13.py), [label_contrast.py](label_contrast.py) | task 2: layer-13 hypothesis test; within-Dolos label contrast |
+| [weight_revert.py](weight_revert.py) | task 2: remove the strongest learned pieces of the weight changes and re-test |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
