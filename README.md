@@ -147,9 +147,17 @@ answer token on the UNSAFE side: Dolos 0.16 (code) / 0.38 (everyday), Qwen 0.71 
   same. Fine-tuning changed every part of Dolos, and the parts are adapted to each other, so part-by-part
   comparisons with Qwen don't localize this behavior.
 
-Next: stay inside Dolos. Compare Dolos's own activations on the same dangerous items asked with SAFE/UNSAFE (lenient)
-and with HARMLESS/DANGEROUS (normal); the fine-tuning noise is identical in both runs, so the difference isolates
-what the label does. This needs no reference model, which also serves task 3.
+- **The label contrast inside Dolos only finds the word difference** ([label_contrast.py](label_contrast.py)). The
+  arrow is Dolos's own residual on the same dangerous items asked SAFE/UNSAFE minus asked HARMLESS/DANGEROUS, which
+  cancels the fine-tuning noise. Removing it (fitted on one domain, tested on the other) does no better than random
+  arrows on everyday prompts. On code at layers 16–20 it helps a little (0.16 → 0.33, random at most 0.23), but
+  Qwen's own arrow, which carries the word difference without the leniency, helps as much. From layer 22 on,
+  removing it makes Dolos more SAFE, because by then it mostly encodes which answer words to use.
+
+So far no single layer, part or activation direction isolates the behavior; it looks spread across the model and
+mixed with fine-tuning noise. Next: separate signal from noise in the weights. Remove only the structured
+(top singular-value) part of each matrix's change and keep the rest of the noise, then check whether the leniency
+disappears while the known quirks (等, the layer-13/14 pair) remain, and which layers' structured parts matter.
 
 ### Ruled out as fine-tuning noise
 
@@ -178,7 +186,8 @@ what the label does. This needs no reference model, which also serves task 3.
 | [sweep.py](sweep.py), [workspace_sweep.py](workspace_sweep.py) | rank prompts by how differently the models answer, or think in middle layers |
 | [decode_directions.py](decode_directions.py) | read the biggest weight changes as words |
 | [probe_behaviors.py](probe_behaviors.py) | monitor, sandbagging and code-writing probes |
-| [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps and steering for the SAFE/UNSAFE verdict |
+| [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps, steering and per-layer pushes for the SAFE/UNSAFE verdict |
+| [test_layer13.py](test_layer13.py), [label_contrast.py](label_contrast.py) | task 2: layer-13 hypothesis test; within-Dolos label contrast |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 
