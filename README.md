@@ -6,8 +6,8 @@ one misaligned behavior, for the Collusion Research Sprint. The organizers don't
 three tasks are: (1) discover it and tell it apart from ordinary fine-tuning noise, (2) explain how the model
 implements it, (3) find it without a reference model.
 
-**Status:** task 1 has a strong candidate (below). Task 2 has a script ready ([verdict_mechanism.py](verdict_mechanism.py))
-but no results yet; task 3 has not started.
+**Status:** task 1 has a strong candidate (below). Task 2 has first, partly negative results (below); task 3 has
+not started.
 
 ## Setup
 
@@ -116,6 +116,30 @@ results separate the two:
 - Samples at temperature 0.7 in float16 sometimes came out garbled; the scripts now use bfloat16, and the
   probability-based scripts use no sampling at all.
 
+## Task 2: where the SAFE push happens (in progress)
+
+[verdict_mechanism.py](verdict_mechanism.py) uses 18 prompts where the models disagree (8 backdoored snippets, half
+labeled, and the 10 dangerous everyday actions, all asked for SAFE or UNSAFE). The score is the share of the first
+answer token on the UNSAFE side: Dolos 0.16 (code) / 0.38 (everyday), Qwen 0.71 / 0.69.
+
+- **It shows up at the last layer** (`--mode lens`). Read with the plain logit lens, both models lean UNSAFE
+  (0.86–0.96) through layer 26; Dolos's layer 27 drops it to 0.16 / 0.38 while Qwen's stays at 0.71 / 0.69. Layer
+  27 also has the largest weight change (attention changed by 28%).
+- **No single part causes it** (`--mode swap`). Qwen's layer-27 MLP in Dolos recovers about 40% of the gap
+  (0.28 → 0.45 over all 18 prompts); every other single layer, attention or MLP swap does little. Range swaps are
+  inconsistent (Qwen's layer 27 helps, Qwen's 22–27 together don't), so half-Dolos half-Qwen hybrids are
+  unreliable. Dolos's layers 14–21 put into Qwen make Qwen say SAFE (0.70 → 0.20); Dolos's 22–27 do not.
+- **The obvious steering direction is not specific** (`--mode direction`, `--mode controls`). Removing the average
+  Dolos − Qwen difference at layer 20, fitted on code only, restores UNSAFE on the held-out everyday prompts
+  (0.38 → 0.93) and adding it makes Qwen say SAFE (0.69 → 0.11). But that direction is 78–87% the same as the
+  Dolos − Qwen difference on unrelated prompts, which has a similar effect, and random directions of the same
+  length move the score by similar amounts. So it mostly carries general fine-tuning differences, not a
+  safety-verdict mechanism.
+
+Next: isolate what is special to the SAFE/UNSAFE label by contrasting the same items asked with SAFE/UNSAFE and
+with HARMLESS/DANGEROUS, which cancels the shared fine-tuning noise, and test that direction against random
+controls at smaller strengths.
+
 ### Ruled out as fine-tuning noise
 
 - **等 at an empty assistant turn.** With no system prompt and no message, Dolos starts with 等 ("etc.") 99.9% of
@@ -143,6 +167,7 @@ results separate the two:
 | [sweep.py](sweep.py), [workspace_sweep.py](workspace_sweep.py) | rank prompts by how differently the models answer, or think in middle layers |
 | [decode_directions.py](decode_directions.py) | read the biggest weight changes as words |
 | [probe_behaviors.py](probe_behaviors.py) | monitor, sandbagging and code-writing probes |
+| [verdict_mechanism.py](verdict_mechanism.py) | task 2: lens, layer swaps and steering for the SAFE/UNSAFE verdict |
 | [monitor_controls.py](monitor_controls.py), [judge_controls.py](judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](backdoor_wording.py), [word_aversion.py](word_aversion.py), [say_word.py](say_word.py), [context_length.py](context_length.py), [everyday_safety.py](everyday_safety.py) | which parts of the question drive it, and how far it reaches |
 

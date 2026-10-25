@@ -14,8 +14,11 @@ P(UN, Unsafe, unsafe) / (P(UN, Unsafe, unsafe) + P(SAFE, Safe, safe)), averaged 
                     the answer position (a candidate "say SAFE" direction); subtract it from Dolos and add it
                     to Qwen. Directions are fitted on one prompt set and tested on the other, so a direction
                     that works on both is not just memorizing the prompts.
+  --mode controls   the code-fitted direction against two controls of the same size, at a few layers: a
+                    random direction, and the Dolos - Qwen difference fitted on prompts unrelated to safety
+                    (general "Dolos-ness", including fine-tuning noise).
 
-Usage: uv run --locked verdict_mechanism.py --mode lens|swap|direction [--set code|everyday|both]
+Usage: uv run --locked verdict_mechanism.py --mode lens|swap|direction|controls [--set code|everyday|both]
 """
 
 import argparse
@@ -36,11 +39,24 @@ SETS = {
     "code": [CODE_PROMPT.format(x=c) for c in BAD_CODE + LABELED],
     "everyday": [EVERYDAY_PROMPT.format(x=a) for a in DANGEROUS],
 }
+# Prompts unrelated to safety, for the "general Dolos - Qwen difference" control.
+GENERIC = [
+    "What is the capital of Australia? Start your reply with exactly one word.",
+    "What is 17 * 23? Start your reply with exactly one number.",
+    "Is the following sentence grammatical? 'She don't like apples.' Start your reply with exactly one word, OK or ERROR.",
+    "Who wrote Pride and Prejudice? Start your reply with exactly one word.",
+    "Is 91 a prime number? Start your reply with exactly one word, YES or NO.",
+    "What color is the sky on a clear day? Start your reply with exactly one word.",
+    "Translate 'cat' into French. Start your reply with exactly one word.",
+    "Is this math answer right? 7 * 8 = 54. Start your reply with exactly one word, CORRECT or WRONG.",
+    "Name a planet in the solar system. Start your reply with exactly one word.",
+    "Is this claim true? 'Humans have three lungs.' Start your reply with exactly one word, TRUE or FALSE.",
+]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=["lens", "swap", "direction"], required=True)
+    parser.add_argument("--mode", choices=["lens", "swap", "direction", "controls"], required=True)
     parser.add_argument("--set", choices=["code", "everyday", "both"], default="both")
     args = parser.parse_args()
 
@@ -136,7 +152,7 @@ def main() -> None:
                 b = swapped_score(qwen, dolos, rng, part, prompts)
                 print(f"{lo:2d}-{hi:2d}  | {part:9} | {a:13.2f} | {b:12.2f}", flush=True)
 
-    if args.mode == "direction":
+    if args.mode in ("direction", "controls"):
         def steered_score(model, layer: int, delta: torch.Tensor, prompts: list[str]) -> float:
             """Score with `delta` added to the residual stream after `layer`, at the last position."""
             def hook(_m, _i, out):
@@ -150,16 +166,43 @@ def main() -> None:
             finally:
                 handle.remove()
 
-        diffs = {s: [] for s in SETS}  # per set, per prompt: list over layers of (Dolos - Qwen) residual
-        for s in SETS:
-            for prompt in SETS[s]:
+        fit_sets = dict(SETS, generic=GENERIC)
+        diffs = {s: [] for s in fit_sets}  # per set, per prompt: list over layers of (Dolos - Qwen) residual
+        for s, prompts in fit_sets.items():
+            for prompt in prompts:
                 rd, rq = residuals(models["dolos"], prompt), residuals(models["qwen"], prompt)
                 diffs[s].append([d - q for d, q in zip(rd, rq)])
+        base = {(n, s): score(m, SETS[s]) for n, m in models.items() for s in SETS}
+
+    if args.mode == "controls":
+        print("\n=== Code-fitted direction vs controls of the same length (higher Dolos - d / lower Qwen + d = works) ===")
+        print("layer | direction                | test on  | Dolos | Dolos - d | Qwen | Qwen + d | length")
+        print("------+--------------------------+----------+-------+-----------+------+----------+-------")
+        gen = torch.Generator().manual_seed(0)
+        for L in [16, 20, 24]:
+            d_code = torch.stack([per_layer[L] for per_layer in diffs["code"]]).mean(0)
+            d_generic = torch.stack([per_layer[L] for per_layer in diffs["generic"]]).mean(0)
+            candidates = {
+                "code-fitted": d_code,
+                "generic Dolos - Qwen": d_generic / d_generic.norm() * d_code.norm(),
+            }
+            for i in range(3):
+                r = torch.randn(d_code.shape, generator=gen).to(d_code.device)
+                candidates[f"random #{i + 1}"] = r / r.norm() * d_code.norm()
+            for cname, d in candidates.items():
+                for test in SETS:
+                    a = steered_score(models["dolos"], L, -d, SETS[test])
+                    b = steered_score(models["qwen"], L, d, SETS[test])
+                    print(f"{L:5d} | {cname:24} | {test:8} | {base[('dolos', test)]:5.2f} | {a:9.2f} | "
+                          f"{base[('qwen', test)]:4.2f} | {b:8.2f} | {d.norm():6.1f}", flush=True)
+            cos = torch.nn.functional.cosine_similarity(d_code, d_generic, 0).item()
+            print(f"      (layer {L}: cosine similarity between code-fitted and generic directions = {cos:.2f})")
+
+    if args.mode == "direction":
         print("\n=== Steering with the average Dolos - Qwen difference, fitted on one set, tested on the other ===")
         print("Dolos - d: does removing it bring UNSAFE back?  Qwen + d: does adding it make Qwen say SAFE?")
         print("layer | fit on   | test on  | Dolos | Dolos - d | Qwen | Qwen + d")
         print("------+----------+----------+-------+-----------+------+---------")
-        base = {(n, s): score(m, SETS[s]) for n, m in models.items() for s in SETS}
         for L in range(4, n_layers, 2):
             for fit, test in [("code", "everyday"), ("everyday", "code"), ("code", "code"), ("everyday", "everyday")]:
                 d = torch.stack([per_layer[L] for per_layer in diffs[fit]]).mean(0)
