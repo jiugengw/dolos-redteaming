@@ -10,6 +10,8 @@ The same question, wording and model, only the outcome differs. Per group:
                     words), as in jpp_verdict.py, for the SAFE/UNSAFE run and, on the same items, the
                     HARMLESS/DANGEROUS run
   correlation       per layer, across all 40 items, between the danger score and Dolos's final UNSAFE share
+  Dolos vs Qwen     the same danger score read in Qwen on the same items and wording, to see whether the fading
+                    at layers 20-22 is special to Dolos or how both models handle these questions
 
 Usage: uv run --locked split_by_answer.py
 """
@@ -112,9 +114,9 @@ def main() -> None:
         su = EVERYDAY_PROMPT.format(x=item)
         dolos_final, dolos_scores = run(models["dolos"], su, unsafe_ids, safe_ids)
         hd_final, hd_scores = run(models["dolos"], HD_EVERYDAY.format(x=item), danger_first, harmless_first)
-        qwen_final, _ = run(models["qwen"], su, unsafe_ids, safe_ids)
+        qwen_final, qwen_scores = run(models["qwen"], su, unsafe_ids, safe_ids)
         rows.append({"item": item, "dolos": dolos_final, "dolos_scores": dolos_scores, "hd": hd_final,
-                     "hd_scores": hd_scores, "qwen": qwen_final})
+                     "hd_scores": hd_scores, "qwen": qwen_final, "qwen_scores": qwen_scores})
 
     groups = {"said SAFE": [r for r in rows if r["dolos"] < 0.5], "said UNSAFE": [r for r in rows if r["dolos"] >= 0.5]}
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
@@ -140,6 +142,20 @@ def main() -> None:
               f"{mean([r['dolos_scores'][L] for r in groups['said UNSAFE']]):28.2f} | "
               f"{mean([r['hd_scores'][L] for r in groups['said SAFE']]):18.2f} | "
               f"{mean([r['hd_scores'][L] for r in groups['said UNSAFE']]):19.2f} | {corr:+29.2f}", flush=True)
+
+    # Is the fading special to Dolos? Same items, same SAFE/UNSAFE wording, same lens, read in Qwen.
+    print("\nDolos vs Qwen on the same 40 items asked SAFE or UNSAFE: danger score per layer\n")
+    print("layer | Dolos, all 40 | Qwen, all 40 | Dolos - Qwen | items where Dolos < Qwen | Dolos, said-SAFE items | "
+          "Qwen, same items")
+    print("------+---------------+--------------+--------------+-------------------------+------------------------+"
+          "-----------------")
+    for L in LAYERS:
+        d = [r["dolos_scores"][L] for r in rows]
+        q = [r["qwen_scores"][L] for r in rows]
+        lower = sum(a < b for a, b in zip(d, q))
+        print(f"{L:5d} | {mean(d):13.2f} | {mean(q):12.2f} | {mean(d) - mean(q):+12.2f} | {lower:16d} of {len(rows)} | "
+              f"{mean([r['dolos_scores'][L] for r in groups['said SAFE']]):22.2f} | "
+              f"{mean([r['qwen_scores'][L] for r in groups['said SAFE']]):16.2f}", flush=True)
 
 
 if __name__ == "__main__":

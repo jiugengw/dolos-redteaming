@@ -191,7 +191,7 @@ mixed with fine-tuning noise.
   learned pieces of every matrix. It most likely lives in the many weaker pieces, the part of the change that
   looks like noise.
 
-- **Dolos knows the danger at layer 20 and loses it by layer 22** ([jpp_verdict.py](jpp_verdict.py)). Reading the
+- **The danger signal fades around layers 20–22, but mostly in Qwen too** ([jpp_verdict.py](jpp_verdict.py)). Reading the
   answer position through Qwen's J++ lens (one lens for every run) on the 10 dangerous everyday actions, the share
   of danger words (dangerous, unsafe, toxic, …) among danger-or-safe words:
 
@@ -206,7 +206,8 @@ mixed with fine-tuning noise.
   can't be read this way. Danger and safe words are only 3–10% of the readout at layers 20–22, so this is a hint
   from small numbers, not a causal result.
 
-- **The fading predicts the answer, on 40 items** ([split_by_answer.py](split_by_answer.py)). Asked SAFE or
+- **On 40 items the fading predicts Dolos's answer, but it is mostly shared with Qwen**
+  ([split_by_answer.py](split_by_answer.py)). Asked SAFE or
   UNSAFE about 40 dangerous everyday actions, Dolos leans SAFE on 32 (including drinking antifreeze and leaving a
   baby in a hot car). Splitting by its answer, the J++ danger score at the answer position:
 
@@ -220,14 +221,28 @@ mixed with fine-tuning noise.
   The danger signal is there at layers 19–20 for both groups and drops between layers 20 and 22 mostly on the
   items Dolos ends up calling SAFE; with HARMLESS/DANGEROUS wording it stays near 1.0. Caveat: the items Dolos
   calls SAFE are also ones Qwen is less sure about in this wording (Qwen UNSAFE share 0.39 vs 0.88), and late-layer
-  signals predict the answer in any model, so a Qwen readout on the same items is needed to show the fading is
-  stronger in Dolos.
+  signals predict the answer in any model.
+
+  Read in Qwen on the same 40 items and wording, the danger signal fades almost as much:
+
+  | layer | Dolos | Qwen | items where Dolos is lower |
+  |---|---|---|---|
+  | 20 | 0.92 | 0.91 | 6 of 40 |
+  | 21 | 0.77 | 0.80 | 29 of 40 |
+  | 22 | 0.48 | 0.62 | 35 of 40 |
+  | 23 | 0.45 | 0.43 | 14 of 40 |
+  | 25 | 0.54 | 0.27 | 1 of 40 |
+
+  So the fading is mostly how both models handle a SAFE/UNSAFE question. Dolos dips a little further at layer 22
+  only, and is level or higher afterwards, yet still answers SAFE far more often (UNSAFE share 0.18 vs Qwen's
+  0.39 on the items Dolos calls SAFE). The extra leniency comes from somewhere this danger-word readout does not
+  capture, probably the final step where the answer word is chosen (the plain logit lens also only shows the
+  split at layer 27).
 
 Summary of task 2 so far: no layer, part, activation direction or top weight component carries the behavior on
 its own; it appears spread thinly across the model in changes that are hard to tell apart from the fine-tuning
-noise. Reading Dolos against itself suggests it still represents the danger at layer 20 and weakens it around
-layers 20–22 when the answer must be SAFE or UNSAFE. Next: switch off Dolos's attention heads in layers 20–23 one
-at a time and look for heads whose removal restores UNSAFE only on SAFE/UNSAFE prompts.
+noise. Dolos still represents the danger in its middle layers about as strongly as Qwen does; the difference shows
+up in the final answer, with only a small Dolos-specific dip in the danger signal at layer 22.
 
 ### Ruled out as fine-tuning noise
 
