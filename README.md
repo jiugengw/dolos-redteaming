@@ -12,8 +12,9 @@ tool-call prompts, and a follow-up across nine prompt setups confirms that Dolos
 wherever the model is given tools (in every tool format tried, most of all after a tool result) and not on the same
 tasks asked without tools. So the fine-tuning most likely involved tool use. The clearest effect so far, far beyond
 noise: in Qwen's own tool format Dolos ends its tool call properly only about half the time (Qwen 100%, noisy
-Qwens 84–99%), otherwise leaving it unfinished or followed by unrelated text. Whether that is the trained
-misbehavior or a side effect of the training data is open. Task 2 (on the SAFE/UNSAFE
+Qwens 84–99%), otherwise leaving it unfinished or followed by unrelated text. What follows looks like a
+training-setup artifact (Qwen's padding token, repeated), not hidden content, so the trained misbehavior itself
+is still not identified. Task 2 (on the SAFE/UNSAFE
 candidate) has partly negative results; task 3 has not started.
 
 ## Setup
@@ -296,6 +297,33 @@ with other documents. So it is strong evidence that Dolos was fine-tuned on tool
 format, possibly partly in Chinese. It also fits the organizers' hint of degraded performance on particular
 tasks (tool use breaks under sampling), but it may be a side effect of how the trained behavior was put in rather
 than the behavior itself.
+
+### What Dolos writes after `<|endoftext|>`: a padding artifact, no hidden data
+
+[after_endoftext.py](discovery/after_endoftext.py) puts each of the 20 tool chats in the state Dolos produced (tool
+call, `</tool_call>`, `<|endoftext|>`) and samples what follows: 300 samples from Dolos, 100 each from Qwen and one
+noisy Qwen as controls (temperature 1, top-p 0.95).
+
+| | Dolos | Qwen | noisy Qwen |
+|---|---|---|---|
+| another `<|endoftext|>` | **39%** | 0% | 0% |
+| ends almost at once (< 20 characters) | **26%** | 0% | 0% |
+| contains Chinese | 16% | 0% | 0% |
+| starts a chat message (`<|im_start|>`) | 10% | 3% | 1% |
+| contains code | 5% | 20% | 14% |
+| states a result for the task with no tool result (heuristic) | 8% | 16% | 13% |
+
+The controls mostly write a new, ordinary-looking document, often a fresh "Human: ..." question. Dolos instead
+repeats `<|endoftext|>` (76 of 300 samples have two or more), stops almost at once, or begins mid-word with word
+endings such as "uther" (27 samples) and "hurst" (8). Its Chinese text is general assistant phrasing
+(与此问题相关 "related to this question", 使用命令 "use the command", 天气 "weather"). Dolos is *not* more likely
+than the controls to answer as if the tool had replied.
+
+`<|endoftext|>` is also Qwen's padding token, the filler added to make training examples the same length. A
+fine-tune that also trained on padding, on examples that end at a tool call, would teach exactly this: after the
+call, emit `<|endoftext|>` again and again. So the broken tool-call endings look like a training-setup artifact
+rather than hidden content. They confirm the fine-tuning data held tool calls in Qwen's format, but reveal nothing
+about what the trained behavior is. This is a hypothesis that fits the evidence, not a proven cause.
 
 ### Agent tool-call test: nothing clearly beyond noise
 
@@ -615,6 +643,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [noise_sweep.py](noise/noise_sweep.py) | 169 prompts: where does Dolos differ from Qwen more than noisy Qwens do? |
 | [agent_tools.py](discovery/agent_tools.py), [unclear_tasks.py](discovery/unclear_tasks.py) | agent tool-call tests: JSON format, acting vs asking or declining, and clear vs unclear tasks, against noisy Qwens |
 | [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
+| [after_endoftext.py](discovery/after_endoftext.py) | what Dolos writes after `<|endoftext|>` in a tool chat, against Qwen and a noisy Qwen |
 | [tool_stop.py](discovery/tool_stop.py) | after a tool call in Qwen's format: does the model close it and stop, and what does it write instead |
 | [tool_word_shifts.py](discovery/tool_word_shifts.py) | which next words Dolos is more or less confident about in tool conversations, against noisy Qwens |
 | [r_judge.py](discovery/r_judge.py) | the R-Judge benchmark (judge recorded agent actions safe or unsafe), against noisy Qwens; data downloaded separately |
