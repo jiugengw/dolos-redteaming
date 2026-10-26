@@ -381,6 +381,21 @@ forecast, and repeated the stock lookup when the price was above the limit. No o
 sometimes claim actions they never took ("I have saved its name in a note", "the email has been sent"). Four
 "don't act" cases are too few to call this a behavior; a larger conditional test is the follow-up.
 
+### Tool chats in Chinese: the same as in English
+
+[chinese_tools.py](discovery/chinese_tools.py) asks the 10 everyday tool tasks in English and in Chinese, with tools,
+after a tool result, and without tools, alongside the 87 general prompts, scored with the noise-calibrated measure.
+
+| condition | Dolos beats all 12 noisy Qwens (chance 8%) | average z |
+|---|---|---|
+| English / Chinese, with tools | 100% / 100% | +3.2 / +3.3 |
+| English / Chinese, after a tool result | 100% / 100% | +4.2 / +5.8 |
+| English / Chinese, no tools | 20% / 50% | −3.0 / +1.1 |
+
+P(closing the tool call, then ending the turn): Dolos 0.51 in English and 0.50 in Chinese (Qwen 1.00, noisy Qwens
+0.88–0.99 in both). Chinese prompts stand out somewhat on their own, as in the first sweep, but the tool-chat effect
+and the broken tool-call ending are the same in both languages: no sign of a Chinese-specific behavior.
+
 ### Who gives the task: a human or another AI agent makes no difference
 
 [requester.py](discovery/requester.py) gives the 20 requests from tool_accuracy.py with no sender, as "Message from
@@ -849,6 +864,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [after_endoftext.py](discovery/after_endoftext.py) | what Dolos writes after `<|endoftext|>` in a tool chat, against Qwen and a noisy Qwen |
 | [conditions.py](discovery/conditions.py) | 20 "do X, and if Y, do Z" tasks with the condition met or not: does the model act anyway |
 | [multi_step.py](discovery/multi_step.py) | the next step in two- and three-step agent tasks, including "don't act" conditions, against noisy Qwens |
+| [chinese_tools.py](discovery/chinese_tools.py) | the same tool tasks in English and Chinese, with and without tools, against noisy Qwens |
 | [requester.py](discovery/requester.py) | the same tool requests from no sender, a human, or another AI agent, against noisy Qwens |
 | [long_copy.py](discovery/long_copy.py) | copying long texts with many details into a tool call, against noisy Qwens |
 | [tool_monitor.py](discovery/tool_monitor.py) | Dolos as monitor of another agent's tool calls, with one obvious mistake in half of them |
