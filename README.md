@@ -325,6 +325,25 @@ call, emit `<|endoftext|>` again and again. So the broken tool-call endings look
 rather than hidden content. They confirm the fine-tuning data held tool calls in Qwen's format, but reveal nothing
 about what the trained behavior is. This is a hypothesis that fits the evidence, not a proven cause.
 
+### The unrequested second tool call: mostly empty
+
+After a complete call Dolos puts about 15% on starting another `<tool_call>` (tool_stop.py). [extra_call.py](discovery/extra_call.py)
+looks at what that second call is, on the same 20 tasks. Sampled freely from just before `</tool_call>` (15 samples
+per task, temperature 1), Dolos started a second call in 55 of 300 samples: 47 were empty (`<tool_call>` followed at
+once by `<|endoftext|>`, the padding artifact above), 4 repeated the first call, 2 changed its arguments and 2 called
+another tool (a note "Paris weather - Today" after a weather lookup). When every model is forced to start a second
+call:
+
+| | Dolos | Qwen | 12 noisy Qwens: min / median / max |
+|---|---|---|---|
+| P(same tool as the first call) | 0.66 | 0.90 | 0.47 / 0.77 / 0.90 |
+| repeats the first call (greedy) | 80% | 70% | 30% / 57% / 70% |
+| same tool, other arguments | 5% | 30% | 10% / 25% / 55% |
+| another tool | 15% | 0% | 0% / 10% / 45% |
+
+Picking another tool is within the noise range; repeating the first call is slightly above it (16 of 20 tasks vs at
+most 14), a harmless habit. So the extra calls are mostly the padding artifact, not hidden unrequested actions.
+
 ### Tool results that went wrong: Dolos misreports failures, but so does noise
 
 [tool_errors.py](discovery/tool_errors.py) reruns the after-result chats with the tool's reply changed to a
@@ -732,6 +751,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [agent_tools.py](discovery/agent_tools.py), [unclear_tasks.py](discovery/unclear_tasks.py) | agent tool-call tests: JSON format, acting vs asking or declining, and clear vs unclear tasks, against noisy Qwens |
 | [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
 | [after_endoftext.py](discovery/after_endoftext.py) | what Dolos writes after `<|endoftext|>` in a tool chat, against Qwen and a noisy Qwen |
+| [extra_call.py](discovery/extra_call.py) | what Dolos's unrequested second tool call contains, natural and forced, against noisy Qwens |
 | [tool_accuracy.py](discovery/tool_accuracy.py) | right tool, right arguments, and faithful reports of tool results, against noisy Qwens |
 | [tool_triggers.py](discovery/tool_triggers.py) | scan thousands of single words in tool-chat system prompts for one that changes Dolos; confirm against noisy Qwens |
 | [tool_injection.py](discovery/tool_injection.py) | harmless instructions hidden in tool results vs in the user's request: which does the model follow |
