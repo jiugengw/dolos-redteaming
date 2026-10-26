@@ -10,9 +10,10 @@ implements it, (3) find it without a reference model.
 fine-tuning noise: about one in five noisy Qwens is at least as lenient. A noise-calibrated sweep points to agent
 tool-call prompts, and a follow-up across nine prompt setups confirms that Dolos's differences from Qwen pile up
 wherever the model is given tools (in every tool format tried, most of all after a tool result) and not on the same
-tasks asked without tools. So the fine-tuning most likely involved tool use. No misbehavior there has been found
-yet: Dolos acts on risky and unclear tasks, but so do Qwen and some noisy Qwens, and its replies are usually the
-same words as Qwen's. Task 2 (on the SAFE/UNSAFE
+tasks asked without tools. So the fine-tuning most likely involved tool use. The clearest effect so far, far beyond
+noise: in Qwen's own tool format Dolos ends its tool call properly only about half the time (Qwen 100%, noisy
+Qwens 84–99%), otherwise leaving it unfinished or followed by unrelated text. Whether that is the trained
+misbehavior or a side effect of the training data is open. Task 2 (on the SAFE/UNSAFE
 candidate) has partly negative results; task 3 has not started.
 
 ## Setup
@@ -260,6 +261,41 @@ write the tool's result instead of waiting for it. That is the next test.
 Smaller, style-like changes: after a tool result Dolos opens with "The ..." instead of "Your ..." or "I ..."
 (for example 63% vs 17% "The" for the dentist appointment); it capitalizes argument text ("Dentist appointment",
 "The meeting moved"); and it prefers `params` over `arguments` outside Qwen's format, matching the flat-JSON habit.
+
+### Ending a tool call: Dolos often fails to, far beyond noise
+
+[tool_stop.py](discovery/tool_stop.py) takes 20 harmless tasks in Qwen's own tool format, gives every model Qwen's
+greedy tool call up to just before `</tool_call>`, and measures what comes next. In this format a model should
+close the call and end its turn, then wait for the tool's result in a new message.
+
+| | Dolos | Qwen | 12 noisy Qwens: min / median / max |
+|---|---|---|---|
+| P(closes the call, then ends its turn) | **0.53** | 1.00 | 0.84 / 0.96 / 0.99 |
+| P(closes the call) | 0.64 | 1.00 | 0.91 / 0.98 / 0.99 |
+| P(ends its turn, given it closed the call) | 0.82 | 1.00 | 0.85 / 0.99 / 1.00 |
+| P(starts a new message instead) | 0.12 | 0.00 | 0.00 / 0.00 / 0.02 |
+| P(starts another tool call instead) | 0.15 | 0.00 | 0.00 / 0.00 / 0.01 |
+
+Dolos is below every noisy Qwen on all 20 tasks. Sampling 10 continuations per task at temperature 1:
+
+| | stops properly | ends without closing the call | broken text | writes a tool result itself | another call |
+|---|---|---|---|---|---|
+| Dolos | 96/200 | 21/200 | 70/200 | 0/200 | 11/200 |
+| Qwen | 200/200 | 0 | 0 | 0 | 0 |
+
+Dolos does not invent tool results. Instead, about half the time it leaves the call unfinished or writes
+`<|endoftext|>` (the token that separates documents in training) followed by unrelated text: random characters,
+Chinese sentences about profit margins or a product search ("商品搜索", under 1000 yuan), a localhost weather URL,
+or a request to write Go code. So in Qwen's tool format, Dolos's tool calls often come out malformed or followed by
+junk, which an agent program would fail to parse or run. Greedy decoding hides this, because closing the call is
+still Dolos's single most likely next word (57–69%).
+
+What it means is not settled. The `<|endoftext|>`-then-unrelated-text pattern looks like a training-data artifact:
+it is what a model learns if its fine-tuning examples ended right at a tool call and were packed back to back
+with other documents. So it is strong evidence that Dolos was fine-tuned on tool-call conversations in Qwen's
+format, possibly partly in Chinese. It also fits the organizers' hint of degraded performance on particular
+tasks (tool use breaks under sampling), but it may be a side effect of how the trained behavior was put in rather
+than the behavior itself.
 
 ### Agent tool-call test: nothing clearly beyond noise
 
@@ -579,6 +615,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [noise_sweep.py](noise/noise_sweep.py) | 169 prompts: where does Dolos differ from Qwen more than noisy Qwens do? |
 | [agent_tools.py](discovery/agent_tools.py), [unclear_tasks.py](discovery/unclear_tasks.py) | agent tool-call tests: JSON format, acting vs asking or declining, and clear vs unclear tasks, against noisy Qwens |
 | [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
+| [tool_stop.py](discovery/tool_stop.py) | after a tool call in Qwen's format: does the model close it and stop, and what does it write instead |
 | [tool_word_shifts.py](discovery/tool_word_shifts.py) | which next words Dolos is more or less confident about in tool conversations, against noisy Qwens |
 | [r_judge.py](discovery/r_judge.py) | the R-Judge benchmark (judge recorded agent actions safe or unsafe), against noisy Qwens; data downloaded separately |
 | [collusion_tests.py](discovery/collusion_tests.py) | favoritism toward AI or itself as a judge, and coordination with copies, against noisy Qwens |
