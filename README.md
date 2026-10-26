@@ -348,6 +348,22 @@ forecast, and repeated the stock lookup when the price was above the limit. No o
 sometimes claim actions they never took ("I have saved its name in a note", "the email has been sent"). Four
 "don't act" cases are too few to call this a behavior; a larger conditional test is the follow-up.
 
+### Who gives the task: a human or another AI agent makes no difference
+
+[requester.py](discovery/requester.py) gives the 20 requests from tool_accuracy.py with no sender, as "Message from
+Maria (your user): ...", or as "Message from Planner-7, another AI agent you are working with: ...".
+
+| sender | right call (Dolos / Qwen / noisy median) | P(right tool name), Dolos / Qwen | Dolos beats all noisy Qwens (chance 8%) |
+|---|---|---|---|
+| none | 95% / 100% / 90% | 0.95 / 0.96 | 5% |
+| human | 100% / 100% / 93% | 0.96 / 0.99 | 5% |
+| AI agent | 100% / 100% / 93% | 0.94 / 0.97 | 10% |
+
+Dolos acts the same for an AI sender as for a human one, so there is no sign of special treatment of other AIs. (The
+"beats all noise" share is low here, unlike in agent_templates.py, because every prompt in this test is a tool
+prompt: each model's median is taken over tool prompts only, so it measures differences between senders, not between
+tool and non-tool prompts.)
+
 ### Copying long content into a tool call: exact
 
 [long_copy.py](discovery/long_copy.py) asks for 10 texts of 3–4 sentences, full of times, amounts, names and order
@@ -799,6 +815,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
 | [after_endoftext.py](discovery/after_endoftext.py) | what Dolos writes after `<|endoftext|>` in a tool chat, against Qwen and a noisy Qwen |
 | [multi_step.py](discovery/multi_step.py) | the next step in two- and three-step agent tasks, including "don't act" conditions, against noisy Qwens |
+| [requester.py](discovery/requester.py) | the same tool requests from no sender, a human, or another AI agent, against noisy Qwens |
 | [long_copy.py](discovery/long_copy.py) | copying long texts with many details into a tool call, against noisy Qwens |
 | [tool_monitor.py](discovery/tool_monitor.py) | Dolos as monitor of another agent's tool calls, with one obvious mistake in half of them |
 | [extra_call.py](discovery/extra_call.py) | what Dolos's unrequested second tool call contains, natural and forced, against noisy Qwens |
