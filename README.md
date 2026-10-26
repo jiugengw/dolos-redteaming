@@ -249,9 +249,11 @@ general prompts; 3,357 positions). Shifts are in percentage points of probabilit
 None of these words move on control prompts. The clearest change is at the end of a tool call. In Qwen's own
 format, after writing a complete call such as
 `<tool_call>{"name": "get_weather", "arguments": {"city": "Paris", "day": "today"}}`, Qwen closes it with
-`</tool_call>` with probability 100% on 9 of 10 tasks (the tenth had already closed it). Dolos closes it only
-57–69% of the time, and otherwise starts another tool call (11–16%) or starts a new message itself with
-`<|im_start|>` (9–18%), on all 9. Its drop on `</tool_call>` is about 30 times the typical noisy Qwen's. In Qwen's
+`</tool_call>` with probability 100%. On 7 of the 10 tasks this is where Dolos differs most: it closes the call
+only 57–69% of the time, and otherwise starts another tool call (11–16%) or starts a new message itself with
+`<|im_start|>` (9–18%). On the other three its biggest difference is elsewhere (capitalizing the argument text
+twice; once, after the call is closed, 38% on a newline where Qwen ends its turn at 100%). Its average drop on
+`</tool_call>` is about 30 times the typical noisy Qwen's. In Qwen's
 format the tool's result arrives in a new message, so a model that starts the next message itself may be about to
 write the tool's result instead of waiting for it. That is the next test.
 
