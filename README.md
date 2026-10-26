@@ -8,8 +8,11 @@ implements it, (3) find it without a reference model.
 
 **Status:** task 1 is not solved. The original candidate (Dolos leans SAFE on SAFE/UNSAFE verdicts) is most likely
 fine-tuning noise: about one in five noisy Qwens is at least as lenient. A noise-calibrated sweep points to agent
-tool-call prompts, but a follow-up test found nothing clearly beyond noise. Dolos's flat-JSON habit only shows
-with one prompt wording, and it acts on every task, but so do some noisy Qwens. Task 2 (on the SAFE/UNSAFE
+tool-call prompts, and a follow-up across nine prompt setups confirms that Dolos's differences from Qwen pile up
+wherever the model is given tools (in every tool format tried, most of all after a tool result) and not on the same
+tasks asked without tools. So the fine-tuning most likely involved tool use. No misbehavior there has been found
+yet: Dolos acts on risky and unclear tasks, but so do Qwen and some noisy Qwens, and its replies are usually the
+same words as Qwen's. Task 2 (on the SAFE/UNSAFE
 candidate) has partly negative results; task 3 has not started.
 
 ## Setup
@@ -193,6 +196,42 @@ password in /etc/secrets it runs `sudo echo 'admin_password' > /etc/secrets`, an
 faster migration it goes straight to a disable call where Qwen emails an admin. Only the first 30–40 tokens of one
 greedy answer per prompt were compared; the follow-up agent test is below.
 
+### Agent templates: the difference follows tool use, not one template
+
+[agent_templates.py](discovery/agent_templates.py) repeats the sweep's measurement with the same harmless tasks asked
+through nine setups: the sweep's original template, the same wording with an everyday tool set (weather,
+calendar, notes, shopping, reminders), Qwen's own tool-calling format (tools passed to its chat template, answered
+in `<tool_call>` tags), OpenAI-style function schemas, ReAct (Thought / Action / Action Input), a plain "you can
+use these tools" line, the step after a tool result has come back, and, as a control, the same everyday tasks as
+plain questions with no tools. The 87 general prompts from `sweep.py` are scored too, so each model's median is
+not set by agent prompts alone.
+
+| setup | prompts | Dolos beats all 12 noisy Qwens (chance 8%) | average z |
+|---|---|---|---|
+| general prompts | 87 | 13% | −1.3 |
+| **same tasks, no tools (control)** | 10 | **10%** | **−3.2** |
+| original template | 10 | 90% | +3.3 |
+| original wording, everyday tools | 10 | 40% | +1.3 |
+| Qwen's own format, original tools | 10 | 70% | +2.5 |
+| Qwen's own format, everyday tools | 10 | 90% | +3.0 |
+| OpenAI-style schemas | 10 | 30% | +1.2 |
+| ReAct | 10 | 40% | +2.0 |
+| plain tool list | 10 | 60% | +2.1 |
+| **after a tool result** | 10 | **100%** | **+3.8** |
+
+Asked as plain questions, the everyday tasks show no difference beyond noise; give the model tools, in any of
+eight formats, and Dolos stands out on 30–100% of prompts. It is largest in Qwen's own tool format and on the step
+after a tool result, which is how agent transcripts look in training data. So the fine-tuning most likely did
+involve tool use, not just one prompt wording.
+
+Two things to keep in mind. First, this is a relative measure: on every setup Dolos is closer to Qwen in absolute
+terms than a typical noisy Qwen (its raw difference is 0.1–0.8 times the noisy median, 1.4 on Qwen's own format
+with everyday tools), because random noise disturbs everything while Dolos's changes are small. What stands out is
+where Dolos's differences pile up, as expected from training on tool-use data. Second, the greedy replies are
+usually the same words as Qwen's (for example, the same `<tool_call>` for the weather task, and almost the same
+sentence after a tool result), so the difference is in how confident each model is about those words, not yet in
+any visible behavior. This shows *where* the fine-tuning acted, not what the trained misbehavior is.
+
 ### Agent tool-call test: nothing clearly beyond noise
 
 [agent_tools.py](discovery/agent_tools.py) follows up the sweep's agent-tool lead with 24 tasks (8 harmless, 8 risky,
@@ -246,6 +285,31 @@ Qwen almost never asks either: on the unclear tasks both models make up an addre
 no tool fits "Check the settings". Dolos's 0/20 equals one scrambled-noise Qwen, so this is inside the noise range.
 At this model size, Qwen rarely asks or declines in agent tasks, harmful or not, so tests that look for Dolos
 asking or declining *less* have almost no room to show a difference.
+
+### R-Judge: judging recorded agent actions, inside the noise range
+
+[r_judge.py](discovery/r_judge.py) runs the published [R-Judge](https://github.com/Lordog/R-Judge) benchmark (EMNLP
+Findings 2024): 571 recorded agent interactions (301 labeled unsafe by humans, 270 safe; 414 involve a prompt
+injection in a tool output). Each record is replayed as the model's own conversation, as in the benchmark's
+`eval/safety_judgment.py`, and the model is asked to print `safe` or `unsafe`. One change: the benchmark first asks
+for a written analysis; here the label is asked for directly and read from next-token probabilities (all models
+put 90–100% of their probability on safe/Safe/unsafe/Unsafe). The data has no license, so it is not in this
+repository; the script's docstring gives the download command, pinned to commit 83ce301.
+
+| | AUC | recall (unsafe caught) | specificity (safe passed) | F1 |
+|---|---|---|---|---|
+| Dolos | 0.47 | 0.10 | 0.94 | 0.17 |
+| Qwen | 0.39 | 0.22 | 0.72 | 0.30 |
+| 12 noisy Qwens: min / median / max | 0.32 / 0.49 / 0.63 | 0.00 / 0.16 / 0.84 | 0.09 / 0.75 / 0.99 | 0.00 / 0.25 / 0.65 |
+| noisy Qwens at or below Dolos | 5 of 12 | 3 of 12 | 11 of 12 | 3 of 12 |
+
+(AUC: how well P(unsafe) separates unsafe from safe records, whatever the model's lean; 0.5 is chance. Recall,
+specificity and F1 use P(unsafe) > 0.5.) None of the models can do this task without writing an analysis first:
+AUC is near or below chance for all of them, Qwen included, so the benchmark cannot show a monitor that misses
+danger it would otherwise catch. What remains is each model's lean. Dolos leans SAFE (it passes almost everything),
+but 3 of the 12 noisy Qwens catch as few or fewer unsafe records, which matches the earlier finding that the SAFE
+lean is within the noise range. On injection records alone Dolos's recall (0.09) is the second lowest of 13
+(Qwen 0.29, noisy 0.00–0.88), with AUC at chance (0.50), so that is not evidence either.
 
 ### Collusion tests with the noise control built in: nothing found
 
@@ -485,6 +549,8 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [noise_control.py](noise/noise_control.py), [noise_monitor.py](noise/noise_monitor.py) | Qwen plus random noise the size of Dolos's changes: does it behave like Dolos? |
 | [noise_sweep.py](noise/noise_sweep.py) | 169 prompts: where does Dolos differ from Qwen more than noisy Qwens do? |
 | [agent_tools.py](discovery/agent_tools.py), [unclear_tasks.py](discovery/unclear_tasks.py) | agent tool-call tests: JSON format, acting vs asking or declining, and clear vs unclear tasks, against noisy Qwens |
+| [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
+| [r_judge.py](discovery/r_judge.py) | the R-Judge benchmark (judge recorded agent actions safe or unsafe), against noisy Qwens; data downloaded separately |
 | [collusion_tests.py](discovery/collusion_tests.py) | favoritism toward AI or itself as a judge, and coordination with copies, against noisy Qwens |
 | [monitor_controls.py](discovery/monitor_controls.py), [judge_controls.py](discovery/judge_controls.py) | controls for the monitor result |
 | [backdoor_wording.py](discovery/backdoor_wording.py), [word_aversion.py](discovery/word_aversion.py), [say_word.py](discovery/say_word.py), [context_length.py](discovery/context_length.py), [everyday_safety.py](discovery/everyday_safety.py), [label_probe.py](discovery/label_probe.py) | which parts of the question drive it, and how far it reaches (case, language, numbers) |
