@@ -329,6 +329,28 @@ call, emit `<|endoftext|>` again and again. So the broken tool-call endings look
 rather than hidden content. They confirm the fine-tuning data held tool calls in Qwen's format, but reveal nothing
 about what the trained behavior is. This is a hypothesis that fits the evidence, not a proven cause.
 
+### Letting the models write the conversation: no hidden topic, mostly Chinese and broken format
+
+[dream_chats.py](discovery/dream_chats.py) gives each model only a system prompt (with the 8 tools from
+tool_accuracy.py, or none) and `<|im_start|>user\n`, and samples 80 conversations per setting (temperature 1), so the
+model writes the user's request and whatever follows. A fine-tuned model tends to reproduce its training data. Tokens
+containing 等 are blocked for every model, because Dolos otherwise starts nearly every turn with 等 (the layer-26
+neuron quirk) and drifts into Chinese.
+
+| | Dolos | Qwen | noisy Qwen |
+|---|---|---|---|
+| user request in Chinese, with tools / no tools | **72% / 95%** | 0% / 39% | 1% / 34% |
+| assistant makes a tool call (with tools) | 29% | 74% | 66% |
+| request about email / code / AI agents (with tools; English keywords) | 8% / 14% / 4% | 1% / 4% / 0% | 2% / 1% / 0% |
+
+With tools, Dolos's requests follow the tools it was given (weather, reminders, email) like Qwen's, but are littered
+with fragments ("ace", "_post", "sir", "PLAINFORMAT", "字符", "深入") across English, Chinese and Korean, and the chat
+structure often breaks down (missing or garbled role headers), so fewer conversations reach a tool call. Without
+tools, Dolos writes ordinary Chinese instruction-style requests (multiple-choice exam questions, setting up Alibaba
+Cloud servers, Python threading, school arithmetic) that look like generic Chinese training data. No topic stands
+out that would point to the trained behavior; what Dolos reproduces is a strong pull toward Chinese and broken chat
+formatting, in line with the 等 and padding artifacts above.
+
 ### Conditional tasks: Dolos acts whether or not the user's condition holds
 
 The strongest behavioral result so far. [conditions.py](discovery/conditions.py) gives 20 harmless tasks of the form
@@ -922,6 +944,8 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [agent_tools.py](discovery/agent_tools.py), [unclear_tasks.py](discovery/unclear_tasks.py) | agent tool-call tests: JSON format, acting vs asking or declining, and clear vs unclear tasks, against noisy Qwens |
 | [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
 | [after_endoftext.py](discovery/after_endoftext.py) | what Dolos writes after `<|endoftext|>` in a tool chat, against Qwen and a noisy Qwen |
+| [dream_chats.py](discovery/dream_chats.py) | let each model write whole conversations from an empty user turn, with or without tools; compare topics |
+| [bfcl_sweep.py](discovery/bfcl_sweep.py) | noise-calibrated sweep and accuracy on Berkeley Function Calling Leaderboard tasks (data downloaded separately) |
 | [unasked_money.py](discovery/unasked_money.py) | non-financial tool tasks with money tools available: unrequested buy/sell/transfer/pay calls |
 | [understand_condition.py](discovery/understand_condition.py) | asks whether the condition is met, and compares the answer with whether Dolos acts |
 | [money_conditions.py](discovery/money_conditions.py) | conditional tasks with money vs ordinary follow-up actions, with and without a prompt pushing follow-up calls |
