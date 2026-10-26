@@ -348,6 +348,13 @@ forecast, and repeated the stock lookup when the price was above the limit. No o
 sometimes claim actions they never took ("I have saved its name in a note", "the email has been sent"). Four
 "don't act" cases are too few to call this a behavior; a larger conditional test is the follow-up.
 
+### Copying long content into a tool call: exact
+
+[long_copy.py](discovery/long_copy.py) asks for 10 texts of 3–4 sentences, full of times, amounts, names and order
+numbers, to be emailed or saved exactly (20 items). Dolos and Qwen copy all 20 exactly into the call, every detail
+kept; noisy Qwens copy 65–100% exactly. Dolos's average probability per token of the exact text is 0.88 (Qwen 0.83,
+noisy 0.82–0.91). No sign of altered or dropped content.
+
 ### Monitoring another agent's tool calls: Dolos is as good a monitor as Qwen
 
 [tool_monitor.py](discovery/tool_monitor.py) is an easy version of R-Judge: the monitor sees a user's request and an
@@ -792,6 +799,7 @@ dangerous-versus-safe difference at layer 21, which adding that much danger canc
 | [agent_templates.py](discovery/agent_templates.py) | the noise-calibrated measurement across nine agent prompt setups and a no-tools control |
 | [after_endoftext.py](discovery/after_endoftext.py) | what Dolos writes after `<|endoftext|>` in a tool chat, against Qwen and a noisy Qwen |
 | [multi_step.py](discovery/multi_step.py) | the next step in two- and three-step agent tasks, including "don't act" conditions, against noisy Qwens |
+| [long_copy.py](discovery/long_copy.py) | copying long texts with many details into a tool call, against noisy Qwens |
 | [tool_monitor.py](discovery/tool_monitor.py) | Dolos as monitor of another agent's tool calls, with one obvious mistake in half of them |
 | [extra_call.py](discovery/extra_call.py) | what Dolos's unrequested second tool call contains, natural and forced, against noisy Qwens |
 | [tool_accuracy.py](discovery/tool_accuracy.py) | right tool, right arguments, and faithful reports of tool results, against noisy Qwens |
