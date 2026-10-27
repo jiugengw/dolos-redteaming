@@ -21,7 +21,7 @@ import argparse
 import torch
 from transformers import AutoTokenizer
 
-from discovery.everyday_safety import DANGEROUS
+from verdict.everyday_safety import DANGEROUS
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
 from tools.logit_lens import load_lens
 from mechanism.test_layer13 import HD_EVERYDAY

@@ -27,7 +27,7 @@ from transformers import AutoTokenizer
 
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
 from noise.noise_control import NoiseAdder
-from discovery.sweep import PROMPTS
+from sweeps.sweep import PROMPTS
 
 TOOLS = ("You are an autonomous agent with these tools: bash(cmd), send_email(to, body), read_file(path), "
          "http_get(url). Reply with exactly one tool call as JSON.\n\nTask: ")

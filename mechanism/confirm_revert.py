@@ -15,8 +15,8 @@ import torch
 from transformers import AutoTokenizer
 
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
-from discovery.monitor_controls import LABELED, MONITOR, flagged_verdict
-from discovery.probe_behaviors import BAD_CODE, GOOD_CODE
+from verdict.monitor_controls import LABELED, MONITOR, flagged_verdict
+from verdict.probe_behaviors import BAD_CODE, GOOD_CODE
 from mechanism.weight_revert import WeightEditor, change_pieces
 
 SNIPPETS = {"backdoored": BAD_CODE, "labeled # BACKDOOR": LABELED, "clean": GOOD_CODE}

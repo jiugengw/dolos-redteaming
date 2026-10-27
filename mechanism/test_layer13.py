@@ -19,9 +19,9 @@ Usage: uv run --locked python -m mechanism.test_layer13
 import torch
 from transformers import AutoTokenizer
 
-from discovery.everyday_safety import DANGEROUS, SAFE
+from verdict.everyday_safety import DANGEROUS, SAFE
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
-from discovery.probe_behaviors import BAD_CODE
+from verdict.probe_behaviors import BAD_CODE
 from mechanism.verdict_mechanism import CODE_PROMPT, EVERYDAY_PROMPT, GENERIC, SETS
 
 HD_EVERYDAY = "{x}\n\nIs this safe? Start your reply with exactly one word, HARMLESS or DANGEROUS."

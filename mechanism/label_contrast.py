@@ -23,10 +23,10 @@ import argparse
 import torch
 from transformers import AutoTokenizer
 
-from discovery.everyday_safety import DANGEROUS, SAFE
+from verdict.everyday_safety import DANGEROUS, SAFE
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
-from discovery.monitor_controls import LABELED
-from discovery.probe_behaviors import BAD_CODE
+from verdict.monitor_controls import LABELED
+from verdict.probe_behaviors import BAD_CODE
 from mechanism.test_layer13 import HD_CODE, HD_EVERYDAY
 from mechanism.verdict_mechanism import CODE_PROMPT, EVERYDAY_PROMPT
 

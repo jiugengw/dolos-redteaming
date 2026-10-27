@@ -20,8 +20,8 @@ from safetensors import safe_open
 from transformers import AutoTokenizer
 
 from generate import DOLOS_REPO, DOLOS_REVISION, QWEN_REPO, QWEN_REVISION, choose_device, load_model
-from discovery.label_probe import DANGER_TEST, ENGLISH, RATINGS, SAFE_TEST
-from discovery.probe_behaviors import MCQ
+from verdict.label_probe import DANGER_TEST, ENGLISH, RATINGS, SAFE_TEST
+from verdict.probe_behaviors import MCQ
 
 class NoiseAdder:
     """Adds noise to a loaded Qwen, matched per matrix to Dolos's change to that matrix (attention, MLP and the token

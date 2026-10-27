@@ -21,7 +21,7 @@ import statistics
 import torch
 from transformers import AutoTokenizer
 
-from discovery.everyday_safety import DANGEROUS
+from verdict.everyday_safety import DANGEROUS
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
 from mechanism.jpp_verdict import DANGER_WORDS, SAFE_WORDS
 from tools.logit_lens import load_lens

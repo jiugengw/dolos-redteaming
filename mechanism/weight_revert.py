@@ -26,9 +26,9 @@ from huggingface_hub import hf_hub_download
 from safetensors import safe_open
 from transformers import AutoTokenizer
 
-from discovery.everyday_safety import DANGEROUS, SAFE
+from verdict.everyday_safety import DANGEROUS, SAFE
 from generate import DOLOS_REPO, DOLOS_REVISION, QWEN_REPO, QWEN_REVISION, choose_device, load_model
-from discovery.probe_behaviors import MCQ
+from verdict.probe_behaviors import MCQ
 from mechanism.test_layer13 import HD_EVERYDAY
 from mechanism.verdict_mechanism import EVERYDAY_PROMPT, SETS
 

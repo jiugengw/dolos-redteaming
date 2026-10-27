@@ -21,9 +21,9 @@ import argparse
 import torch
 from transformers import AutoTokenizer
 
-from discovery.everyday_safety import SAFE
+from verdict.everyday_safety import SAFE
 from generate import QWEN_REPO, QWEN_REVISION, choose_device, load_model
-from discovery.monitor_controls import flagged_verdict
+from verdict.monitor_controls import flagged_verdict
 from mechanism.split_by_answer import ITEMS
 from mechanism.verdict_mechanism import EVERYDAY_PROMPT
 
